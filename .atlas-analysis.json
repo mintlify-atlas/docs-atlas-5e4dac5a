@@ -1,0 +1,128 @@
+{
+  "projectType": "saas",
+  "projectName": "Movilidad",
+  "projectDescription": "Full-stack management application for utility service records, orders, and mobile workforce coordination built with Meteor.js",
+  "theme": "almond",
+  "primaryColor": "#1890ff",
+  "lightColor": "#40a9ff",
+  "darkColor": "#096dd9",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "introduction",
+              "features",
+              "architecture"
+            ]
+          },
+          {
+            "group": "Getting Started",
+            "pages": [
+              "getting-started/installation",
+              "getting-started/configuration",
+              "getting-started/first-user"
+            ]
+          },
+          {
+            "group": "User Guide",
+            "pages": [
+              "guide/authentication",
+              "guide/managing-records",
+              "guide/photo-management",
+              "guide/document-management",
+              "guide/reports",
+              "guide/user-roles"
+            ]
+          },
+          {
+            "group": "Mobile App",
+            "pages": [
+              "mobile/overview",
+              "mobile/installation",
+              "mobile/usage"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "api/authentication/login",
+              "api/authentication/refresh-token"
+            ]
+          },
+          {
+            "group": "Records API",
+            "pages": [
+              "api/records/create-record",
+              "api/records/get-records",
+              "api/records/upload-photos"
+            ]
+          },
+          {
+            "group": "Data Models",
+            "pages": [
+              "api/models/record",
+              "api/models/photo",
+              "api/models/document",
+              "api/models/user"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Deployment",
+        "groups": [
+          {
+            "group": "Setup",
+            "pages": [
+              "deployment/requirements",
+              "deployment/docker",
+              "deployment/environment-variables",
+              "deployment/database-setup"
+            ]
+          },
+          {
+            "group": "Operations",
+            "pages": [
+              "deployment/monitoring",
+              "deployment/backup",
+              "deployment/troubleshooting"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Role-based user authentication and authorization",
+    "Service order and record management system",
+    "Photo and document upload with file storage",
+    "Mobile API with JWT authentication",
+    "Excel import/export for bulk operations",
+    "Financial reporting and analytics",
+    "User assignment and management dashboard",
+    "Real-time data synchronization with MongoDB"
+  ],
+  "publicApiSurface": [
+    "POST /login - Authenticate users and obtain JWT token",
+    "POST /refresh-token - Refresh expired JWT tokens",
+    "POST /management - Create or update service records",
+    "POST /management/photos/:orden - Upload photos for a service order",
+    "GET /management/:username - Retrieve records for a specific user",
+    "GET /health - Health check endpoint",
+    "recordsCollection - MongoDB collection for service records",
+    "photosCollection - MongoDB collection for photo storage",
+    "documentsCollection - MongoDB collection for document storage",
+    "Accounts.createUser() - Create new user accounts",
+    "Meteor.userId() - Get current authenticated user ID",
+    "useRole() - React hook for role-based access control"
+  ]
+}

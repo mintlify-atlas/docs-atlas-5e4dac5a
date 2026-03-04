@@ -1,0 +1,566 @@
+---
+title: 'Backup & Restore'
+description: 'Backup and restore strategies for Movilidad data'
+icon: 'floppy-disk'
+---
+
+## Overview
+
+Regular backups are critical for protecting your Movilidad data. This guide covers backup strategies, automation, and disaster recovery procedures.
+
+## What to Backup
+
+### Critical Data
+
+<CardGroup cols={2}>
+  <Card title="MongoDB Database" icon="database">
+    - User accounts and authentication data
+    - Application records and documents
+    - Roles and permissions
+    - Photos and document metadata
+  </Card>
+  
+  <Card title="Uploaded Files" icon="file">
+    - User-uploaded photos
+    - Document attachments
+    - Exported files
+    - Stored in `/data` volume
+  </Card>
+  
+  <Card title="Configuration" icon="gear">
+    - `settings.json`
+    - `docker-compose.yml`
+    - Environment variables
+    - Custom configurations
+  </Card>
+  
+  <Card title="Docker Volumes" icon="box">
+    - `mongo-data` volume
+    - `app-data` volume (if used)
+    - Persistent storage volumes
+  </Card>
+</CardGroup>
+
+<Warning>
+**Do NOT backup:**
+- Docker images (can be rebuilt)
+- node_modules (can be reinstalled)
+- Build artifacts
+- Temporary files
+</Warning>
+
+## Manual Backup
+
+### Database Backup
+
+<Steps>
+  <Step title="Create Backup Directory">
+    ```bash
+    mkdir -p ~/movilidad-backups/$(date +%Y%m%d)
+    cd ~/movilidad-backups/$(date +%Y%m%d)
+    ```
+  </Step>
+  
+  <Step title="Backup MongoDB">
+    ```bash
+    # Backup entire database
+    docker compose exec -T mongo mongodump \
+      --db meteor \
+      --gzip \
+      --archive > meteor-backup-$(date +%Y%m%d-%H%M%S).gz
+    
+    # Backup with authentication
+    docker compose exec -T mongo mongodump \
+      --db meteor \
+      --username app_user \
+      --password your_password \
+      --authenticationDatabase meteor \
+      --gzip \
+      --archive > meteor-backup-$(date +%Y%m%d-%H%M%S).gz
+    ```
+  </Step>
+  
+  <Step title="Backup Uploaded Files">
+    ```bash
+    # Backup data volume
+    docker run --rm \
+      -v movilidad_data:/data \
+      -v $(pwd):/backup \
+      alpine tar czf /backup/data-backup-$(date +%Y%m%d-%H%M%S).tar.gz -C /data .
+    
+    # Or copy directly from container
+    docker compose cp mongo:/data/db ./mongo-data-backup
+    ```
+  </Step>
+  
+  <Step title="Backup Configuration">
+    ```bash
+    # Copy configuration files
+    cp ~/movilidad/docker-compose.yml ./
+    cp ~/movilidad/settings.json ./
+    cp ~/movilidad/.env ./ 2>/dev/null || true
+    
+    # Create manifest
+    echo "Backup created: $(date)" > backup-manifest.txt
+    docker compose version >> backup-manifest.txt
+    docker --version >> backup-manifest.txt
+    ```
+  </Step>
+</Steps>
+
+### Complete Backup Script
+
+<Accordion title="backup.sh - Full Backup Script">
+```bash
+#!/bin/bash
+# backup.sh - Complete Movilidad backup script
+
+set -e
+
+# Configuration
+BACKUP_DIR="$HOME/movilidad-backups"
+APP_DIR="$HOME/movilidad"
+RETENTION_DAYS=30
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+BACKUP_PATH="$BACKUP_DIR/$TIMESTAMP"
+
+# Create backup directory
+mkdir -p "$BACKUP_PATH"
+cd "$BACKUP_PATH"
+
+echo "[$(date)] Starting Movilidad backup..."
+
+# 1. Backup MongoDB
+echo "[$(date)] Backing up MongoDB..."
+docker compose -f "$APP_DIR/docker-compose.yml" exec -T mongo mongodump \
+  --db meteor \
+  --gzip \
+  --archive > "meteor-db-$TIMESTAMP.gz"
+
+if [ $? -eq 0 ]; then
+  echo "[$(date)] MongoDB backup completed: $(du -h meteor-db-$TIMESTAMP.gz | cut -f1)"
+else
+  echo "[$(date)] ERROR: MongoDB backup failed!"
+  exit 1
+fi
+
+# 2. Backup uploaded files
+echo "[$(date)] Backing up uploaded files..."
+docker run --rm \
+  -v movilidad_data:/data \
+  -v "$BACKUP_PATH":/backup \
+  alpine tar czf "/backup/data-$TIMESTAMP.tar.gz" -C /data .
+
+if [ $? -eq 0 ]; then
+  echo "[$(date)] Files backup completed: $(du -h data-$TIMESTAMP.tar.gz | cut -f1)"
+else
+  echo "[$(date)] WARNING: Files backup failed!"
+fi
+
+# 3. Backup configuration
+echo "[$(date)] Backing up configuration..."
+cp "$APP_DIR/docker-compose.yml" ./ 2>/dev/null || true
+cp "$APP_DIR/settings.json" ./ 2>/dev/null || true
+cp "$APP_DIR/.env" ./ 2>/dev/null || true
+
+# 4. Create manifest
+cat > backup-manifest.txt <<EOF
+Movilidad Backup Manifest
+Created: $(date)
+Backup ID: $TIMESTAMP
+Hostname: $(hostname)
+
+Versions:
+$(docker compose version)
+$(docker --version)
+
+Containers:
+$(docker compose -f "$APP_DIR/docker-compose.yml" ps)
+
+Database Stats:
+$(docker compose -f "$APP_DIR/docker-compose.yml" exec -T mongo mongosh meteor --quiet --eval 'JSON.stringify(db.stats(), null, 2)')
+
+Files:
+$(ls -lh)
+EOF
+
+# 5. Create checksum
+echo "[$(date)] Creating checksums..."
+sha256sum *.gz *.tar.gz > checksums.txt 2>/dev/null || true
+
+# 6. Clean old backups
+echo "[$(date)] Cleaning backups older than $RETENTION_DAYS days..."
+find "$BACKUP_DIR" -maxdepth 1 -type d -mtime +$RETENTION_DAYS -exec rm -rf {} \; 2>/dev/null || true
+
+# 7. Summary
+BACKUP_SIZE=$(du -sh "$BACKUP_PATH" | cut -f1)
+echo "[$(date)] Backup completed successfully!"
+echo "Location: $BACKUP_PATH"
+echo "Total size: $BACKUP_SIZE"
+
+# Optional: Upload to remote storage
+# rsync -avz "$BACKUP_PATH" user@backup-server:/backups/movilidad/
+# aws s3 sync "$BACKUP_PATH" s3://my-backup-bucket/movilidad/$TIMESTAMP/
+
+exit 0
+```
+</Accordion>
+
+Make it executable and run:
+
+```bash
+chmod +x backup.sh
+./backup.sh
+```
+
+## Automated Backups
+
+### Daily Backup with Cron
+
+<Steps>
+  <Step title="Edit Crontab">
+    ```bash
+    crontab -e
+    ```
+  </Step>
+  
+  <Step title="Add Backup Schedule">
+    ```bash
+    # Daily backup at 2 AM
+    0 2 * * * /home/user/movilidad/backup.sh >> /var/log/movilidad-backup.log 2>&1
+    
+    # Weekly full backup on Sunday at 3 AM
+    0 3 * * 0 /home/user/movilidad/backup-full.sh >> /var/log/movilidad-backup.log 2>&1
+    
+    # Hourly incremental backup (MongoDB only)
+    0 * * * * /home/user/movilidad/backup-incremental.sh >> /var/log/movilidad-backup.log 2>&1
+    ```
+  </Step>
+  
+  <Step title="Verify Cron Job">
+    ```bash
+    # List cron jobs
+    crontab -l
+    
+    # Test backup script manually
+    /home/user/movilidad/backup.sh
+    
+    # Check cron logs
+    tail -f /var/log/movilidad-backup.log
+    ```
+  </Step>
+</Steps>
+
+### Docker-based Automated Backup
+
+Add a backup service to your `docker-compose.yml`:
+
+```yaml
+services:
+  # ... existing services ...
+  
+  backup:
+    image: alpine:latest
+    volumes:
+      - movilidad_data:/data:ro
+      - ./backups:/backup
+    command: sh -c '
+      while true; do
+        timestamp=$$(date +%Y%m%d-%H%M%S);
+        tar czf /backup/data-$$timestamp.tar.gz -C /data . &&
+        echo "Backup completed: $$timestamp" &&
+        find /backup -name "data-*.tar.gz" -mtime +30 -delete;
+        sleep 86400;
+      done
+    '
+    restart: unless-stopped
+```
+
+## Restore Procedures
+
+### Database Restore
+
+<Warning>
+**CAUTION**: Restoring will overwrite existing data. Always verify backups before restoring to production.
+</Warning>
+
+<Steps>
+  <Step title="Stop Application">
+    ```bash
+    docker compose stop app
+    ```
+    
+    <Info>
+    Keep MongoDB running but stop the app to prevent data changes during restore.
+    </Info>
+  </Step>
+  
+  <Step title="Restore MongoDB">
+    ```bash
+    # Restore from gzipped archive
+    cat meteor-backup-20240101-120000.gz | \
+      docker compose exec -T mongo mongorestore \
+        --db meteor \
+        --gzip \
+        --archive \
+        --drop
+    
+    # With authentication
+    cat meteor-backup-20240101-120000.gz | \
+      docker compose exec -T mongo mongorestore \
+        --db meteor \
+        --username app_user \
+        --password your_password \
+        --authenticationDatabase meteor \
+        --gzip \
+        --archive \
+        --drop
+    ```
+  </Step>
+  
+  <Step title="Restore Uploaded Files">
+    ```bash
+    # Extract to temporary location first
+    mkdir -p /tmp/restore-data
+    tar xzf data-backup-20240101-120000.tar.gz -C /tmp/restore-data
+    
+    # Copy to volume
+    docker run --rm \
+      -v movilidad_data:/data \
+      -v /tmp/restore-data:/backup \
+      alpine sh -c "rm -rf /data/* && cp -a /backup/* /data/"
+    
+    # Cleanup
+    rm -rf /tmp/restore-data
+    ```
+  </Step>
+  
+  <Step title="Verify and Restart">
+    ```bash
+    # Check database
+    docker compose exec mongo mongosh meteor --eval '
+      printjson(db.stats());
+      print("Users:", db.users.countDocuments());
+      print("Records:", db.records.countDocuments());
+    '
+    
+    # Restart application
+    docker compose start app
+    
+    # Check logs
+    docker compose logs -f app
+    ```
+  </Step>
+</Steps>
+
+### Disaster Recovery
+
+<Accordion title="Complete System Restore">
+  Complete procedure to restore Movilidad on a new server:
+  
+  ```bash
+  # 1. Install prerequisites
+  curl -fsSL https://get.docker.com | sh
+  sudo usermod -aG docker $USER
+  
+  # 2. Restore configuration
+  mkdir -p ~/movilidad
+  cd ~/movilidad
+  tar xzf /path/to/backup/config-backup.tar.gz
+  
+  # 3. Pull images
+  docker compose pull
+  
+  # 4. Create volumes
+  docker compose up -d mongo --no-start
+  
+  # 5. Restore database
+  cat /path/to/backup/meteor-db-*.gz | \
+    docker compose exec -T mongo mongorestore \
+      --db meteor --gzip --archive
+  
+  # 6. Restore files
+  docker run --rm \
+    -v movilidad_data:/data \
+    -v /path/to/backup:/backup \
+    alpine tar xzf /backup/data-*.tar.gz -C /data
+  
+  # 7. Start all services
+  docker compose up -d
+  
+  # 8. Verify
+  docker compose logs -f
+  curl http://localhost:3000
+  ```
+</Accordion>
+
+## Backup Strategies
+
+### 3-2-1 Backup Rule
+
+<Info>
+**Best Practice**: Follow the 3-2-1 rule:
+- **3** copies of your data
+- **2** different storage media types
+- **1** copy offsite
+</Info>
+
+<Tabs>
+  <Tab title="Local Backups">
+    ```bash
+    # On the same server
+    /var/backups/movilidad/
+    
+    # On attached storage
+    /mnt/backup-drive/movilidad/
+    ```
+    
+    **Pros**: Fast, easy access
+    **Cons**: Vulnerable to server failure
+  </Tab>
+  
+  <Tab title="Network Backups">
+    ```bash
+    # NAS/Network storage
+    rsync -avz ~/movilidad-backups/ nas:/backups/movilidad/
+    
+    # Remote server
+    rsync -avz -e ssh ~/movilidad-backups/ user@backup-server:/backups/
+    ```
+    
+    **Pros**: Protected from local failures
+    **Cons**: Network dependency
+  </Tab>
+  
+  <Tab title="Cloud Backups">
+    ```bash
+    # AWS S3
+    aws s3 sync ~/movilidad-backups/ s3://my-bucket/movilidad/
+    
+    # Google Cloud Storage
+    gsutil -m rsync -r ~/movilidad-backups/ gs://my-bucket/movilidad/
+    
+    # Backblaze B2
+    b2 sync ~/movilidad-backups/ b2://my-bucket/movilidad/
+    ```
+    
+    **Pros**: Offsite, durable, scalable
+    **Cons**: Cost, internet dependency
+  </Tab>
+</Tabs>
+
+### Backup Schedule Recommendations
+
+| Backup Type | Frequency | Retention | Purpose |
+|-------------|-----------|-----------|----------|
+| Full | Weekly | 4 weeks | Complete recovery |
+| Incremental | Daily | 7 days | Recent changes |
+| Database | Hourly | 24 hours | Data loss prevention |
+| Critical Files | Real-time | 1 week | Important uploads |
+
+## Backup Verification
+
+### Test Backups Regularly
+
+<Steps>
+  <Step title="Verify Backup Integrity">
+    ```bash
+    # Check archive integrity
+    gunzip -t meteor-backup-*.gz
+    tar tzf data-backup-*.tar.gz > /dev/null
+    
+    # Verify checksums
+    sha256sum -c checksums.txt
+    ```
+  </Step>
+  
+  <Step title="Test Restore Process">
+    ```bash
+    # Create test environment
+    docker compose -f docker-compose.test.yml up -d
+    
+    # Restore to test environment
+    cat backup.gz | docker compose -f docker-compose.test.yml exec -T mongo \
+      mongorestore --db meteor_test --gzip --archive
+    
+    # Verify data
+    docker compose -f docker-compose.test.yml exec mongo \
+      mongosh meteor_test --eval 'db.users.countDocuments()'
+    ```
+  </Step>
+  
+  <Step title="Document Results">
+    Keep a log of backup tests:
+    ```bash
+    echo "$(date): Backup test successful" >> backup-tests.log
+    ```
+  </Step>
+</Steps>
+
+### Monitoring Backup Health
+
+```bash
+#!/bin/bash
+# check-backups.sh - Verify recent backups exist
+
+BACKUP_DIR="$HOME/movilidad-backups"
+MAX_AGE_HOURS=26  # Allow up to 26 hours for daily backup
+
+LATEST_BACKUP=$(find "$BACKUP_DIR" -name "meteor-db-*.gz" -mmin -$((MAX_AGE_HOURS * 60)) | head -1)
+
+if [ -z "$LATEST_BACKUP" ]; then
+  echo "ERROR: No recent backup found!"
+  # Send alert
+  echo "No backup in last $MAX_AGE_HOURS hours" | mail -s "Backup Alert" admin@example.com
+  exit 1
+fi
+
+echo "Latest backup: $LATEST_BACKUP"
+echo "Size: $(du -h "$LATEST_BACKUP" | cut -f1)"
+echo "Age: $(find "$LATEST_BACKUP" -printf '%Td days %TH:%TM\n')"
+```
+
+## Storage Management
+
+### Cleanup Old Backups
+
+```bash
+# Delete backups older than 30 days
+find ~/movilidad-backups -type d -mtime +30 -exec rm -rf {} \;
+
+# Keep only last 10 backups
+ls -t ~/movilidad-backups | tail -n +11 | xargs -I {} rm -rf ~/movilidad-backups/{}
+
+# Compress old backups
+find ~/movilidad-backups -name "*.tar" -mtime +7 -exec gzip {} \;
+```
+
+### Estimate Storage Needs
+
+```bash
+# Current database size
+docker compose exec mongo mongosh meteor --eval 'db.stats(1024*1024)'
+
+# Current files size
+docker run --rm -v movilidad_data:/data alpine du -sh /data
+
+# Estimate monthly backup storage
+# (DB size + Files size) × 30 days × compression ratio (0.3)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Monitoring" icon="chart-line" href="./monitoring">
+    Monitor backup success and health
+  </Card>
+  <Card title="Database Setup" icon="database" href="./database-setup">
+    Optimize database for backups
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="./troubleshooting">
+    Debug backup and restore issues
+  </Card>
+  <Card title="Docker Deployment" icon="docker" href="./docker">
+    Return to deployment guide
+  </Card>
+</CardGroup>

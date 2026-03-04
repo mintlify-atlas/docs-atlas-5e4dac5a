@@ -1,0 +1,428 @@
+---
+title: 'Docker Deployment'
+description: 'Deploy Movilidad using Docker and Docker Compose'
+icon: 'docker'
+---
+
+## Overview
+
+Movilidad uses a multi-stage Docker build process to create optimized production containers. The application runs with a MongoDB database in a containerized environment.
+
+## Docker Architecture
+
+### Multi-Stage Build
+
+The Dockerfile uses a two-stage build process:
+
+<Steps>
+  <Step title="Stage 1: Build Stage">
+    Uses `geoffreybooth/meteor-base:3.0.1` to build the Meteor application bundle.
+    
+    - Copies package files and installs npm dependencies
+    - Copies application source code
+    - Builds the Meteor bundle
+  </Step>
+  
+  <Step title="Stage 2: Runtime Stage">
+    Uses `node:20.15.1-alpine` for a minimal production image.
+    
+    - Copies the built bundle from stage 1
+    - Installs runtime dependencies
+    - Sets up entrypoint and starts the application
+  </Step>
+</Steps>
+
+<Info>
+The multi-stage build keeps the final image size small by excluding build tools and source files.
+</Info>
+
+## Docker Compose Configuration
+
+### Services Overview
+
+The `docker-compose.yml` defines two services:
+
+```yaml
+services:
+  app:
+    # Movilidad application container
+    ports:
+      - '3000:3000'
+    depends_on:
+      - mongo
+  
+  mongo:
+    # MongoDB database container
+    image: mongo:latest
+    command:
+      - --storageEngine=wiredTiger
+```
+
+### Service Details
+
+<Accordion title="Application Service (app)">
+  The main application container:
+  
+  - **Build Context**: Current directory with `Dockerfile`
+  - **Port Mapping**: 3000:3000 (host:container)
+  - **Dependencies**: Waits for MongoDB to start
+  - **Volumes**: `/root/data:/data` for file uploads
+  - **Environment**: Configured via environment variables
+</Accordion>
+
+<Accordion title="MongoDB Service (mongo)">
+  The database container:
+  
+  - **Image**: `mongo:latest` (MongoDB 7.x)
+  - **Storage Engine**: WiredTiger for better performance
+  - **Volume**: Persistent data storage in `data` volume
+  - **Internal Network**: Accessible at `mongodb://mongo:27017`
+</Accordion>
+
+## Deployment Steps
+
+### Quick Start
+
+<Steps>
+  <Step title="Clone the Repository">
+    ```bash
+    git clone <repository-url>
+    cd movilidad
+    ```
+  </Step>
+  
+  <Step title="Configure Environment Variables">
+    Create a `.env` file in the project root:
+    
+    ```bash
+    # .env
+    APP_ROOT_URL=http://localhost
+    ```
+    
+    See [Environment Variables](/deployment/environment-variables) for all options.
+  </Step>
+  
+  <Step title="Build and Start Containers">
+    ```bash
+    docker compose up -d
+    ```
+    
+    This will:
+    - Build the application image
+    - Pull the MongoDB image
+    - Create and start both containers
+    - Set up the internal network
+  </Step>
+  
+  <Step title="Verify Deployment">
+    ```bash
+    # Check container status
+    docker compose ps
+    
+    # View application logs
+    docker compose logs -f app
+    
+    # View database logs
+    docker compose logs -f mongo
+    ```
+  </Step>
+</Steps>
+
+### Accessing the Application
+
+Once deployed, access Movilidad at:
+
+- **Local**: http://localhost:3000
+- **Production**: Use your configured `ROOT_URL`
+
+<Note>
+Default admin credentials (from `settings.json`):
+- Username: `admin`
+- Password: `admin`
+
+**Change these immediately in production!**
+</Note>
+
+## Docker Commands
+
+### Essential Commands
+
+<CodeGroup>
+```bash Start Services
+# Start in detached mode
+docker compose up -d
+
+# Start with build (if Dockerfile changed)
+docker compose up -d --build
+
+# View logs while starting
+docker compose up
+```
+
+```bash Stop Services
+# Stop containers (preserves data)
+docker compose stop
+
+# Stop and remove containers
+docker compose down
+
+# Stop and remove containers + volumes (⚠️ deletes data)
+docker compose down -v
+```
+
+```bash View Logs
+# Follow all logs
+docker compose logs -f
+
+# Follow app logs only
+docker compose logs -f app
+
+# Last 100 lines
+docker compose logs --tail=100 app
+```
+
+```bash Rebuild
+# Rebuild application image
+docker compose build app
+
+# Rebuild without cache
+docker compose build --no-cache app
+
+# Rebuild and restart
+docker compose up -d --build
+```
+</CodeGroup>
+
+### Container Management
+
+```bash
+# Execute commands in running container
+docker compose exec app sh
+
+# Check resource usage
+docker stats
+
+# Inspect container details
+docker compose exec app env
+
+# Restart specific service
+docker compose restart app
+```
+
+## Production Deployment
+
+### Dockerfile Analysis
+
+<Accordion title="View Full Dockerfile">
+  ```dockerfile
+  # Stage 1: Build
+  FROM geoffreybooth/meteor-base:3.0.1
+  
+  COPY ./app/package*.json $APP_SOURCE_FOLDER/
+  RUN bash $SCRIPTS_FOLDER/build-app-npm-dependencies.sh
+  
+  COPY ./app $APP_SOURCE_FOLDER/
+  RUN bash $SCRIPTS_FOLDER/build-meteor-bundle.sh
+  
+  # Stage 2: Runtime
+  FROM node:20.15.1-alpine
+  
+  ENV APP_BUNDLE_FOLDER /opt/bundle
+  ENV SCRIPTS_FOLDER /docker
+  
+  RUN apk --no-cache add \
+    bash \
+    ca-certificates
+  
+  COPY --from=0 $SCRIPTS_FOLDER $SCRIPTS_FOLDER/
+  COPY --from=0 $APP_BUNDLE_FOLDER/bundle $APP_BUNDLE_FOLDER/bundle/
+  
+  RUN bash $SCRIPTS_FOLDER/build-meteor-npm-dependencies.sh
+  
+  ENTRYPOINT ["/docker/entrypoint.sh"]
+  CMD ["node", "main.js"]
+  ```
+</Accordion>
+
+### Key Configuration Points
+
+<Warning>
+**Important for Production:**
+
+1. **ROOT_URL**: Must match your domain (e.g., `https://movilidad.example.com`)
+2. **MongoDB Security**: Use authentication in production
+3. **SSL/TLS**: Use a reverse proxy (nginx, Traefik) for HTTPS
+4. **Volume Persistence**: Ensure `/data` volumes are backed up
+5. **Resource Limits**: Set memory/CPU limits in production
+</Warning>
+
+### Production docker-compose.yml Example
+
+```yaml
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '3000:3000'
+    depends_on:
+      - mongo
+    environment:
+      ROOT_URL: https://movilidad.example.com
+      MONGO_URL: mongodb://mongo:27017/meteor
+      PORT: 3000
+      MONGO_OPLOG_URL: mongodb://mongo:27017/local
+    volumes:
+      - app-data:/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2'
+        reservations:
+          memory: 1G
+          cpus: '1'
+  
+  mongo:
+    image: mongo:7.0
+    command:
+      - --storageEngine=wiredTiger
+      - --auth
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: secure_password_here
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+
+volumes:
+  app-data:
+  mongo-data:
+```
+
+## Reverse Proxy Setup
+
+### Nginx Configuration
+
+<CodeGroup>
+```nginx Basic Nginx
+server {
+    listen 80;
+    server_name movilidad.example.com;
+    
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+```nginx SSL with Let's Encrypt
+server {
+    listen 443 ssl http2;
+    server_name movilidad.example.com;
+    
+    ssl_certificate /etc/letsencrypt/live/movilidad.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/movilidad.example.com/privkey.pem;
+    
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+
+server {
+    listen 80;
+    server_name movilidad.example.com;
+    return 301 https://$server_name$request_uri;
+}
+```
+</CodeGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Container fails to start">
+    ```bash
+    # Check logs for errors
+    docker compose logs app
+    
+    # Verify environment variables
+    docker compose exec app env | grep -E '(ROOT_URL|MONGO_URL|PORT)'
+    
+    # Check if MongoDB is ready
+    docker compose logs mongo
+    ```
+  </Accordion>
+  
+  <Accordion title="Cannot connect to MongoDB">
+    ```bash
+    # Verify MongoDB is running
+    docker compose ps mongo
+    
+    # Test MongoDB connection
+    docker compose exec mongo mongosh --eval "db.adminCommand('ping')"
+    
+    # Check network connectivity
+    docker compose exec app ping mongo
+    ```
+  </Accordion>
+  
+  <Accordion title="Build fails">
+    ```bash
+    # Clear Docker build cache
+    docker compose build --no-cache
+    
+    # Remove old images
+    docker system prune -a
+    
+    # Check Dockerfile syntax
+    docker compose config
+    ```
+  </Accordion>
+  
+  <Accordion title="Port already in use">
+    ```bash
+    # Find what's using port 3000
+    sudo lsof -i :3000
+    
+    # Change port in docker-compose.yml
+    ports:
+      - '3001:3000'  # Use 3001 on host
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="gear" href="./environment-variables">
+    Configure application settings
+  </Card>
+  <Card title="Database Setup" icon="database" href="./database-setup">
+    Initialize and configure MongoDB
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="./monitoring">
+    Set up monitoring and health checks
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="./troubleshooting">
+    Common issues and solutions
+  </Card>
+</CardGroup>

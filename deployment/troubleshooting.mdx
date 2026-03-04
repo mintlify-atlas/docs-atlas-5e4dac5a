@@ -1,0 +1,801 @@
+---
+title: 'Troubleshooting'
+description: 'Debug and resolve common Movilidad deployment issues'
+icon: 'wrench'
+---
+
+## Overview
+
+This guide covers common deployment issues, diagnostic procedures, and solutions for running Movilidad in production.
+
+## Quick Diagnostics
+
+### Health Check Commands
+
+Run these commands first to identify issues:
+
+```bash
+# Check container status
+docker compose ps
+
+# View recent logs (all services)
+docker compose logs --tail=50
+
+# Check resource usage
+docker stats --no-stream
+
+# Verify network connectivity
+docker compose exec app ping mongo
+
+# Test MongoDB connection
+docker compose exec mongo mongosh --eval "db.adminCommand('ping')"
+
+# Check disk space
+df -h
+
+# Verify environment variables
+docker compose exec app env | grep -E '(ROOT_URL|MONGO_URL|PORT)'
+```
+
+## Common Issues
+
+### Application Won't Start
+
+<AccordionGroup>
+  <Accordion title="Container exits immediately">
+    **Symptoms**: Container starts then exits with code 1 or 137
+    
+    **Diagnosis**:
+    ```bash
+    # Check exit code and logs
+    docker compose ps
+    docker compose logs app
+    
+    # Check for OOM (Out of Memory)
+    dmesg | grep -i "out of memory"
+    ```
+    
+    **Solutions**:
+    
+    <Steps>
+      <Step title="Check Environment Variables">
+        ```bash
+        # Verify ROOT_URL format (must include protocol)
+        docker compose exec app env | grep ROOT_URL
+        # Should be: ROOT_URL=http://localhost or https://domain.com
+        
+        # Not: ROOT_URL=localhost (missing protocol)
+        ```
+      </Step>
+      
+      <Step title="Increase Memory Limit">
+        ```yaml
+        # docker-compose.yml
+        services:
+          app:
+            deploy:
+              resources:
+                limits:
+                  memory: 2G
+        ```
+      </Step>
+      
+      <Step title="Check MongoDB Connection">
+        ```bash
+        # Verify MongoDB is accessible
+        docker compose exec app ping mongo
+        
+        # Test connection string
+        docker compose exec mongo mongosh mongodb://mongo:27017/meteor
+        ```
+      </Step>
+    </Steps>
+  </Accordion>
+  
+  <Accordion title="Port already in use">
+    **Symptoms**: Error "bind: address already in use"
+    
+    **Diagnosis**:
+    ```bash
+    # Find what's using port 3000
+    sudo lsof -i :3000
+    # or
+    sudo netstat -tulpn | grep :3000
+    ```
+    
+    **Solutions**:
+    
+    ```bash
+    # Option 1: Stop conflicting service
+    sudo kill $(sudo lsof -t -i:3000)
+    
+    # Option 2: Change port in docker-compose.yml
+    ports:
+      - '3001:3000'  # Use different host port
+    
+    # Option 3: Update ROOT_URL to match new port
+    ROOT_URL=http://localhost:3001
+    ```
+  </Accordion>
+  
+  <Accordion title="Build fails">
+    **Symptoms**: Docker build errors, missing dependencies
+    
+    **Diagnosis**:
+    ```bash
+    # Check build logs
+    docker compose build app 2>&1 | tee build.log
+    
+    # Verify Dockerfile exists
+    ls -la Dockerfile
+    ```
+    
+    **Solutions**:
+    
+    ```bash
+    # Clear Docker build cache
+    docker compose build --no-cache app
+    
+    # Remove old images
+    docker system prune -a
+    
+    # Verify disk space
+    df -h
+    
+    # Check Docker daemon
+    sudo systemctl status docker
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Database Connection Issues
+
+<AccordionGroup>
+  <Accordion title="MongoNetworkError: failed to connect">
+    **Symptoms**: Application can't connect to MongoDB
+    
+    **Diagnosis**:
+    ```bash
+    # Check MongoDB container status
+    docker compose ps mongo
+    
+    # View MongoDB logs
+    docker compose logs mongo
+    
+    # Test network connectivity
+    docker compose exec app ping mongo
+    
+    # Verify MONGO_URL
+    docker compose exec app env | grep MONGO_URL
+    ```
+    
+    **Solutions**:
+    
+    <CodeGroup>
+    ```bash Check Service Order
+    # Ensure app waits for MongoDB
+    # docker-compose.yml:
+    services:
+      app:
+        depends_on:
+          - mongo
+    ```
+    
+    ```bash Restart Services
+    # Restart in correct order
+    docker compose down
+    docker compose up -d mongo
+    sleep 10  # Wait for MongoDB to be ready
+    docker compose up -d app
+    ```
+    
+    ```bash Fix Connection String
+    # Correct format:
+    MONGO_URL=mongodb://mongo:27017/meteor
+    
+    # With auth:
+    MONGO_URL=mongodb://user:pass@mongo:27017/meteor?authSource=admin
+    
+    # NOT: localhost or 127.0.0.1 (use service name 'mongo')
+    ```
+    </CodeGroup>
+  </Accordion>
+  
+  <Accordion title="Authentication failed">
+    **Symptoms**: MongoServerError: Authentication failed
+    
+    **Diagnosis**:
+    ```bash
+    # Test credentials manually
+    docker compose exec mongo mongosh \
+      -u app_user \
+      -p your_password \
+      --authenticationDatabase meteor \
+      meteor
+    ```
+    
+    **Solutions**:
+    
+    ```bash
+    # Verify user exists
+    docker compose exec mongo mongosh admin --eval '
+      db.system.users.find({ user: "app_user" }).pretty()
+    '
+    
+    # Recreate user
+    docker compose exec mongo mongosh meteor --eval '
+      db.createUser({
+        user: "app_user",
+        pwd: "your_password",
+        roles: [
+          { role: "readWrite", db: "meteor" },
+          { role: "read", db: "local" }
+        ]
+      })
+    '
+    
+    # Update MONGO_URL with correct credentials
+    MONGO_URL=mongodb://app_user:your_password@mongo:27017/meteor?authSource=meteor
+    ```
+  </Accordion>
+  
+  <Accordion title="Database connection pool exhausted">
+    **Symptoms**: MongoServerError: connection pool exhausted
+    
+    **Diagnosis**:
+    ```javascript
+    // Check current connections
+    docker compose exec mongo mongosh meteor --eval '
+      db.serverStatus().connections
+    '
+    ```
+    
+    **Solutions**:
+    
+    ```javascript
+    // Increase MongoDB connection limit
+    // docker-compose.yml:
+    mongo:
+      command:
+        - --storageEngine=wiredTiger
+        - --maxConns=1000
+    
+    // Kill idle connections
+    docker compose exec mongo mongosh meteor --eval '
+      db.currentOp().inprog.forEach(function(op) {
+        if (op.secs_running > 300) {
+          db.killOp(op.opid);
+        }
+      })
+    '
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Performance Issues
+
+<AccordionGroup>
+  <Accordion title="Slow response times">
+    **Symptoms**: Application takes >5 seconds to respond
+    
+    **Diagnosis**:
+    ```bash
+    # Check resource usage
+    docker stats
+    
+    # Monitor database queries
+    docker compose exec mongo mongosh meteor --eval '
+      db.setProfilingLevel(2);
+    '
+    
+    # View slow queries
+    docker compose exec mongo mongosh meteor --eval '
+      db.system.profile.find({ millis: { $gt: 100 } }).sort({ ts: -1 }).limit(10).pretty()
+    '
+    ```
+    
+    **Solutions**:
+    
+    <Tabs>
+      <Tab title="Optimize Database">
+        ```javascript
+        // Create indexes for common queries
+        db.records.createIndex({ createdAt: -1 })
+        db.records.createIndex({ userId: 1 })
+        db.photos.createIndex({ recordId: 1 })
+        
+        // Compact collections
+        db.runCommand({ compact: 'records' })
+        
+        // Rebuild indexes
+        db.records.reIndex()
+        ```
+      </Tab>
+      
+      <Tab title="Increase Resources">
+        ```yaml
+        # docker-compose.yml
+        services:
+          app:
+            deploy:
+              resources:
+                limits:
+                  memory: 4G
+                  cpus: '2'
+          
+          mongo:
+            deploy:
+              resources:
+                limits:
+                  memory: 2G
+        ```
+      </Tab>
+      
+      <Tab title="Enable Oplog">
+        ```bash
+        # Add to .env
+        MONGO_OPLOG_URL=mongodb://mongo:27017/local
+        
+        # Restart application
+        docker compose restart app
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+  
+  <Accordion title="High memory usage">
+    **Symptoms**: Container using >2GB RAM, OOM kills
+    
+    **Diagnosis**:
+    ```bash
+    # Check memory usage
+    docker stats --no-stream
+    
+    # Node.js memory usage
+    docker compose exec app node -e "console.log(process.memoryUsage())"
+    
+    # Check for memory leaks
+    docker compose logs app | grep -i "heap"
+    ```
+    
+    **Solutions**:
+    
+    ```bash
+    # Increase Node.js heap size
+    NODE_OPTIONS="--max-old-space-size=4096"
+    
+    # Add to docker-compose.yml
+    services:
+      app:
+        environment:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+        deploy:
+          resources:
+            limits:
+              memory: 4G
+    
+    # Restart with new settings
+    docker compose up -d app
+    ```
+  </Accordion>
+  
+  <Accordion title="Disk space issues">
+    **Symptoms**: No space left on device errors
+    
+    **Diagnosis**:
+    ```bash
+    # Check disk usage
+    df -h
+    
+    # Docker disk usage
+    docker system df -v
+    
+    # Volume sizes
+    docker volume ls -q | xargs docker volume inspect | grep -A 3 Mountpoint
+    
+    # Database size
+    docker compose exec mongo mongosh meteor --eval 'db.stats(1024*1024*1024)'
+    ```
+    
+    **Solutions**:
+    
+    ```bash
+    # Clean Docker resources
+    docker system prune -a --volumes
+    
+    # Remove old logs
+    sudo truncate -s 0 /var/lib/docker/containers/*/*-json.log
+    
+    # Clean old data
+    docker compose exec mongo mongosh meteor --eval '
+      db.records.deleteMany({
+        createdAt: { $lt: new Date("2023-01-01") }
+      })
+    '
+    
+    # Compact database
+    docker compose exec mongo mongosh meteor --eval '
+      db.runCommand({ compact: "records" })
+    '
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Login and Authentication
+
+<AccordionGroup>
+  <Accordion title="Can't login with admin credentials">
+    **Symptoms**: Invalid username or password for admin
+    
+    **Diagnosis**:
+    ```bash
+    # Check if admin user exists
+    docker compose exec mongo mongosh meteor --eval '
+      db.users.findOne({ username: "admin" })
+    '
+    
+    # Verify settings.json
+    cat settings.json
+    ```
+    
+    **Solutions**:
+    
+    ```javascript
+    // Reset admin password via MongoDB
+    docker compose exec mongo mongosh meteor
+    
+    // Find user
+    db.users.findOne({ username: "admin" })
+    
+    // Update password (requires generating new hash)
+    // OR delete user to recreate on restart:
+    db.users.deleteOne({ username: "admin" })
+    
+    // Restart app to recreate admin
+    exit
+    docker compose restart app
+    ```
+  </Accordion>
+  
+  <Accordion title="Users can't stay logged in">
+    **Symptoms**: Session expires immediately, constant logouts
+    
+    **Diagnosis**:
+    ```bash
+    # Check ROOT_URL configuration
+    docker compose exec app env | grep ROOT_URL
+    
+    # Must match the URL users access
+    ```
+    
+    **Solutions**:
+    
+    ```bash
+    # Ensure ROOT_URL matches actual domain
+    # Wrong:
+    ROOT_URL=http://localhost  # But accessing via movilidad.com
+    
+    # Correct:
+    ROOT_URL=https://movilidad.example.com
+    
+    # Update and restart
+    docker compose down
+    docker compose up -d
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### File Upload Issues
+
+<AccordionGroup>
+  <Accordion title="File uploads fail">
+    **Symptoms**: Upload errors, files not saving
+    
+    **Diagnosis**:
+    ```bash
+    # Check volume mount
+    docker compose exec app ls -la /data
+    
+    # Check permissions
+    docker compose exec app id
+    
+    # Check disk space
+    docker compose exec app df -h /data
+    ```
+    
+    **Solutions**:
+    
+    ```bash
+    # Fix volume permissions
+    docker compose exec app chown -R node:node /data
+    
+    # Verify volume mount in docker-compose.yml
+    volumes:
+      - data:/data
+    
+    # Recreate volume if needed
+    docker compose down
+    docker volume rm movilidad_data
+    docker compose up -d
+    ```
+  </Accordion>
+  
+  <Accordion title="Uploaded files not appearing">
+    **Symptoms**: Upload succeeds but files missing
+    
+    **Diagnosis**:
+    ```bash
+    # Check file records in database
+    docker compose exec mongo mongosh meteor --eval '
+      db.photos.find().sort({ uploadedAt: -1 }).limit(5).pretty()
+    '
+    
+    # Check actual files
+    docker compose exec app find /data -type f -mtime -1
+    ```
+    
+    **Solutions**:
+    
+    ```javascript
+    // Verify file collection configuration
+    // Check imports/api/photos/photosIndex.js
+    
+    // Clear orphaned records
+    docker compose exec mongo mongosh meteor --eval '
+      db.photos.deleteMany({ fileId: null })
+    '
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Docker-Specific Issues
+
+<AccordionGroup>
+  <Accordion title="Cannot connect to Docker daemon">
+    **Symptoms**: Error "Cannot connect to the Docker daemon"
+    
+    **Solutions**:
+    ```bash
+    # Start Docker service
+    sudo systemctl start docker
+    
+    # Enable on boot
+    sudo systemctl enable docker
+    
+    # Add user to docker group
+    sudo usermod -aG docker $USER
+    newgrp docker  # Or logout and login
+    
+    # Verify
+    docker ps
+    ```
+  </Accordion>
+  
+  <Accordion title="Docker Compose version issues">
+    **Symptoms**: Unknown version, syntax errors
+    
+    **Solutions**:
+    ```bash
+    # Check version
+    docker compose version
+    
+    # Update Docker Compose
+    sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    sudo chmod +x /usr/local/bin/docker-compose
+    
+    # Verify
+    docker compose version
+    ```
+  </Accordion>
+  
+  <Accordion title="Network errors between containers">
+    **Symptoms**: Containers can't communicate
+    
+    **Solutions**:
+    ```bash
+    # Check network
+    docker network ls
+    docker network inspect movilidad_default
+    
+    # Recreate network
+    docker compose down
+    docker network prune
+    docker compose up -d
+    
+    # Test connectivity
+    docker compose exec app ping mongo
+    docker compose exec app nslookup mongo
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Debugging
+
+### Enable Debug Logging
+
+```bash
+# Add to docker-compose.yml
+services:
+  app:
+    environment:
+      METEOR_LOGGING: "debug"
+      NODE_ENV: "development"
+      DEBUG: "*"
+
+# Restart and view logs
+docker compose restart app
+docker compose logs -f app
+```
+
+### Interactive Debugging
+
+```bash
+# Access container shell
+docker compose exec app sh
+
+# Inside container:
+node --version
+env | grep -E '(ROOT_URL|MONGO|PORT)'
+ls -la /opt/bundle/bundle
+ping mongo
+curl http://localhost:3000
+```
+
+### Database Debugging
+
+```javascript
+// Connect to MongoDB shell
+docker compose exec mongo mongosh meteor
+
+// Check collections
+show collections
+
+// Verify data
+db.users.countDocuments()
+db.records.find().limit(1).pretty()
+
+// Check indexes
+db.records.getIndexes()
+
+// Monitor operations
+db.currentOp({ secs_running: { $gt: 5 } })
+
+// Enable profiling
+db.setProfilingLevel(2, { slowms: 100 })
+db.system.profile.find().sort({ ts: -1 }).limit(5).pretty()
+```
+
+## Getting Help
+
+### Gather Diagnostic Information
+
+Before seeking help, collect this information:
+
+```bash
+#!/bin/bash
+# diagnostic-report.sh
+
+echo "=== System Information ==="
+uname -a
+df -h
+free -h
+
+echo -e "\n=== Docker Information ==="
+docker --version
+docker compose version
+docker system info
+
+echo -e "\n=== Container Status ==="
+docker compose ps
+
+echo -e "\n=== Recent Logs ==="
+docker compose logs --tail=100
+
+echo -e "\n=== Resource Usage ==="
+docker stats --no-stream
+
+echo -e "\n=== Environment Variables ==="
+docker compose exec app env | grep -E '(ROOT_URL|MONGO|PORT|NODE)'
+
+echo -e "\n=== Database Status ==="
+docker compose exec mongo mongosh --eval "db.serverStatus()" 2>&1 | head -50
+```
+
+Run and save output:
+```bash
+chmod +x diagnostic-report.sh
+./diagnostic-report.sh > diagnostic-$(date +%Y%m%d-%H%M%S).txt
+```
+
+### Support Channels
+
+<CardGroup cols={2}>
+  <Card title="Check Logs" icon="file-lines">
+    Always check logs first:
+    ```bash
+    docker compose logs -f
+    ```
+  </Card>
+  
+  <Card title="Review Docs" icon="book">
+    Refer to deployment guides:
+    - [Docker Setup](/deployment/docker)
+    - [Environment Variables](/deployment/environment-variables)
+    - [Database Setup](/deployment/database-setup)
+  </Card>
+  
+  <Card title="Search Issues" icon="magnifying-glass">
+    Common errors are often documented in:
+    - Meteor forums
+    - Docker documentation
+    - MongoDB troubleshooting guides
+  </Card>
+  
+  <Card title="Create Issue" icon="bug">
+    If stuck, create a detailed issue report with:
+    - Error messages
+    - Diagnostic output
+    - Steps to reproduce
+  </Card>
+</CardGroup>
+
+## Prevention
+
+### Best Practices
+
+<Tip>
+**Prevent Issues Before They Happen:**
+
+1. Use health checks in production
+2. Monitor logs regularly
+3. Set up automated backups
+4. Test configuration changes in staging
+5. Keep Docker and dependencies updated
+6. Document custom configurations
+7. Use environment-specific settings
+8. Implement proper error handling
+</Tip>
+
+### Regular Maintenance
+
+```bash
+# Weekly maintenance script
+#!/bin/bash
+
+# Clean Docker resources
+docker system prune -f
+
+# Compact database
+docker compose exec mongo mongosh meteor --eval '
+  db.getCollectionNames().forEach(function(c) {
+    print("Compacting: " + c);
+    db.runCommand({ compact: c });
+  })
+'
+
+# Check disk space
+df -h
+
+# Verify backups
+ls -lht ~/movilidad-backups/ | head -5
+
+# Check for updates
+docker compose pull
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Monitoring" icon="chart-line" href="./monitoring">
+    Set up proactive monitoring
+  </Card>
+  <Card title="Backup" icon="floppy-disk" href="./backup">
+    Configure automated backups
+  </Card>
+  <Card title="Requirements" icon="list-check" href="./requirements">
+    Review system requirements
+  </Card>
+  <Card title="Docker Setup" icon="docker" href="./docker">
+    Return to deployment guide
+  </Card>
+</CardGroup>

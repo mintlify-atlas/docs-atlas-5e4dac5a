@@ -1,0 +1,524 @@
+---
+title: 'Database Setup'
+description: 'Configure and initialize MongoDB for Movilidad'
+icon: 'database'
+---
+
+## Overview
+
+Movilidad uses MongoDB as its database, configured with the WiredTiger storage engine for optimal performance. This guide covers database initialization, authentication, and maintenance.
+
+## Database Architecture
+
+### MongoDB Configuration
+
+The Docker setup uses the following MongoDB configuration:
+
+```yaml
+mongo:
+  image: mongo:latest
+  command:
+    - --storageEngine=wiredTiger
+  volumes:
+    - data:/data/db
+```
+
+<Info>
+**WiredTiger Storage Engine** provides:
+- Document-level concurrency
+- Compression (reduces storage by 50-80%)
+- Better performance for most workloads
+- Automatic checkpointing
+</Info>
+
+### Database Structure
+
+Movilidad creates the following collections:
+
+| Collection | Purpose | Key Fields |
+|------------|---------|------------|
+| `users` | User accounts and authentication | username, emails, profile, services |
+| `records` | Main application records | createdAt, userId, data |
+| `photos` | Photo metadata and references | recordId, uploadedAt, fileId |
+| `documents` | Document metadata | type, createdAt, userId |
+| `roles` | User roles and permissions | userId, role |
+
+## Initial Setup
+
+### Automatic Initialization
+
+The application automatically initializes the database on first startup:
+
+<Steps>
+  <Step title="Container Startup">
+    MongoDB container starts and creates the database directory.
+    
+    ```bash
+    docker compose up -d mongo
+    ```
+  </Step>
+  
+  <Step title="Database Creation">
+    When the app connects, MongoDB creates the `meteor` database automatically.
+    
+    ```bash
+    # Connection string from docker-compose.yml
+    MONGO_URL=mongodb://mongo:27017/meteor
+    ```
+  </Step>
+  
+  <Step title="Admin User Creation">
+    The application creates the default admin user on first startup.
+    
+    From `server/main.js`:
+    ```javascript
+    Meteor.startup(async () => {
+      const admin = Meteor.users.findOne({ 
+        username: settings.private.admin.user 
+      });
+      
+      if (!admin) {
+        Accounts.createUser({
+          username: settings.private.admin.user,
+          password: settings.private.admin.password,
+          profile: { role: "admin" },
+        });
+      }
+    });
+    ```
+  </Step>
+  
+  <Step title="Collection Creation">
+    Collections are created automatically when first accessed by the application.
+  </Step>
+</Steps>
+
+<Warning>
+**Change Default Credentials!**
+
+The default admin credentials from `settings.json` are:
+- Username: `admin`
+- Password: `admin`
+
+Change these immediately after first login in production.
+</Warning>
+
+## Production Database Setup
+
+### Enable Authentication
+
+For production, enable MongoDB authentication:
+
+<CodeGroup>
+```yaml docker-compose.production.yml
+services:
+  mongo:
+    image: mongo:7.0
+    command:
+      - --storageEngine=wiredTiger
+      - --auth  # Enable authentication
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ADMIN_PASSWORD}
+      MONGO_INITDB_DATABASE: meteor
+    volumes:
+      - mongo-data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+```
+
+```javascript mongo-init.js
+// Create application user with appropriate permissions
+db = db.getSiblingDB('meteor');
+
+db.createUser({
+  user: 'app_user',
+  pwd: process.env.MONGO_APP_PASSWORD,
+  roles: [
+    {
+      role: 'readWrite',
+      db: 'meteor'
+    },
+    {
+      role: 'read',
+      db: 'local'  // For oplog tailing
+    }
+  ]
+});
+
+print('Application user created successfully');
+```
+</CodeGroup>
+
+### Update Connection String
+
+With authentication enabled, update the application's connection string:
+
+```bash
+# .env.production
+MONGO_URL=mongodb://app_user:${MONGO_APP_PASSWORD}@mongo:27017/meteor?authSource=meteor
+MONGO_OPLOG_URL=mongodb://app_user:${MONGO_APP_PASSWORD}@mongo:27017/local?authSource=meteor
+```
+
+## Database Access
+
+### Using mongosh (MongoDB Shell)
+
+<CodeGroup>
+```bash Access via Docker
+# Connect to MongoDB container
+docker compose exec mongo mongosh
+
+# Connect to specific database
+docker compose exec mongo mongosh meteor
+
+# With authentication
+docker compose exec mongo mongosh -u admin -p --authenticationDatabase admin
+```
+
+```bash Common Commands
+# Show all databases
+show dbs
+
+# Switch to meteor database
+use meteor
+
+# Show all collections
+show collections
+
+# Count users
+db.users.countDocuments()
+
+# Find admin user
+db.users.findOne({ "profile.role": "admin" })
+
+# List all users
+db.users.find({}, { username: 1, "profile.role": 1 })
+```
+</CodeGroup>
+
+### Database Queries
+
+<AccordionGroup>
+  <Accordion title="User Management">
+    ```javascript
+    // Find all users
+    db.users.find().pretty()
+    
+    // Count users by role
+    db.users.aggregate([
+      { $group: { _id: "$profile.role", count: { $sum: 1 } } }
+    ])
+    
+    // Update user role
+    db.users.updateOne(
+      { username: "john" },
+      { $set: { "profile.role": "admin" } }
+    )
+    
+    // Reset user password (generate new hash via app)
+    db.users.findOne({ username: "admin" })
+    ```
+  </Accordion>
+  
+  <Accordion title="Records and Data">
+    ```javascript
+    // Count records
+    db.records.countDocuments()
+    
+    // Recent records
+    db.records.find().sort({ createdAt: -1 }).limit(10)
+    
+    // Records by date range
+    db.records.find({
+      createdAt: {
+        $gte: ISODate("2024-01-01"),
+        $lt: ISODate("2024-12-31")
+      }
+    }).count()
+    
+    // Delete old records (use with caution!)
+    db.records.deleteMany({
+      createdAt: { $lt: ISODate("2023-01-01") }
+    })
+    ```
+  </Accordion>
+  
+  <Accordion title="Performance Monitoring">
+    ```javascript
+    // Database statistics
+    db.stats()
+    
+    // Collection statistics
+    db.records.stats()
+    
+    // Current operations
+    db.currentOp()
+    
+    // Server status
+    db.serverStatus()
+    
+    // Index usage statistics
+    db.records.aggregate([{ $indexStats: {} }])
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Database Indexes
+
+### Recommended Indexes
+
+Create indexes to improve query performance:
+
+```javascript
+// User lookups by username
+db.users.createIndex({ "username": 1 }, { unique: true })
+
+// User lookups by email
+db.users.createIndex({ "emails.address": 1 })
+
+// Records by creation date
+db.records.createIndex({ "createdAt": -1 })
+
+// Records by user
+db.records.createIndex({ "userId": 1 })
+
+// Photos by record
+db.photos.createIndex({ "recordId": 1 })
+
+// Documents by type and date
+db.documents.createIndex({ "type": 1, "createdAt": -1 })
+```
+
+<Tip>
+Meteor automatically creates indexes for published collections, but manual indexes can improve performance for complex queries.
+</Tip>
+
+### Index Management
+
+```javascript
+// List all indexes on a collection
+db.records.getIndexes()
+
+// Check index usage
+db.records.aggregate([{ $indexStats: {} }])
+
+// Drop an index
+db.records.dropIndex("createdAt_-1")
+
+// Rebuild all indexes
+db.records.reIndex()
+```
+
+## Database Maintenance
+
+### Regular Maintenance Tasks
+
+<Steps>
+  <Step title="Monitor Database Size">
+    ```bash
+    # Check database size
+    docker compose exec mongo mongosh --eval "db.stats(1024*1024)"
+    
+    # Check collection sizes
+    docker compose exec mongo mongosh meteor --eval "db.stats()"
+    ```
+  </Step>
+  
+  <Step title="Compact Collections">
+    ```javascript
+    // Compact a collection to reclaim space
+    db.runCommand({ compact: 'records' })
+    
+    // For all collections
+    db.getCollectionNames().forEach(function(col) {
+      print('Compacting: ' + col);
+      db.runCommand({ compact: col });
+    });
+    ```
+  </Step>
+  
+  <Step title="Validate Collections">
+    ```javascript
+    // Validate collection integrity
+    db.records.validate({ full: true })
+    
+    // Check all collections
+    db.getCollectionNames().forEach(function(col) {
+      var result = db[col].validate();
+      if (!result.valid) {
+        print('Invalid collection: ' + col);
+      }
+    });
+    ```
+  </Step>
+</Steps>
+
+### Database Backup
+
+See the [Backup Guide](/deployment/backup) for detailed backup procedures.
+
+<CodeGroup>
+```bash Quick Backup
+# Backup entire database
+docker compose exec mongo mongodump --db meteor --out /tmp/backup
+
+# Copy backup from container
+docker compose cp mongo:/tmp/backup ./backups/
+```
+
+```bash Quick Restore
+# Copy backup to container
+docker compose cp ./backups/meteor mongo:/tmp/restore/
+
+# Restore database
+docker compose exec mongo mongorestore --db meteor /tmp/restore/meteor
+```
+</CodeGroup>
+
+## Database Migration
+
+### Migrating from Another System
+
+<Steps>
+  <Step title="Export from Source">
+    ```bash
+    # From old MongoDB instance
+    mongodump --host old-server --db meteor --out ./export
+    ```
+  </Step>
+  
+  <Step title="Import to Movilidad">
+    ```bash
+    # Copy to container
+    docker compose cp ./export/meteor mongo:/tmp/import/
+    
+    # Import data
+    docker compose exec mongo mongorestore \
+      --db meteor \
+      /tmp/import
+    ```
+  </Step>
+  
+  <Step title="Verify Import">
+    ```bash
+    # Check document counts
+    docker compose exec mongo mongosh meteor --eval '
+      db.getCollectionNames().forEach(function(col) {
+        print(col + ": " + db[col].countDocuments());
+      });
+    '
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection Refused">
+    **Problem**: Application can't connect to MongoDB
+    
+    **Solutions**:
+    ```bash
+    # Check if MongoDB is running
+    docker compose ps mongo
+    
+    # View MongoDB logs
+    docker compose logs mongo
+    
+    # Verify network connectivity
+    docker compose exec app ping mongo
+    
+    # Check MONGO_URL environment variable
+    docker compose exec app env | grep MONGO_URL
+    ```
+  </Accordion>
+  
+  <Accordion title="Authentication Failed">
+    **Problem**: Authentication errors when connecting
+    
+    **Solutions**:
+    ```bash
+    # Verify credentials
+    docker compose exec mongo mongosh \
+      -u app_user \
+      -p your_password \
+      --authenticationDatabase meteor
+    
+    # Check user exists
+    docker compose exec mongo mongosh admin --eval '
+      db.system.users.find({ user: "app_user" })
+    '
+    
+    # Recreate user if needed (as admin)
+    docker compose exec mongo mongosh -u admin -p admin_pass --eval '
+      use meteor;
+      db.createUser({
+        user: "app_user",
+        pwd: "new_password",
+        roles: [{ role: "readWrite", db: "meteor" }]
+      });
+    '
+    ```
+  </Accordion>
+  
+  <Accordion title="Slow Queries">
+    **Problem**: Database queries are slow
+    
+    **Solutions**:
+    ```javascript
+    // Enable profiling
+    db.setProfilingLevel(2)
+    
+    // View slow queries
+    db.system.profile.find().sort({ ts: -1 }).limit(10).pretty()
+    
+    // Check for missing indexes
+    db.records.find({ userId: "123" }).explain("executionStats")
+    
+    // Create appropriate indexes
+    db.records.createIndex({ userId: 1 })
+    ```
+  </Accordion>
+  
+  <Accordion title="Out of Disk Space">
+    **Problem**: MongoDB runs out of disk space
+    
+    **Solutions**:
+    ```bash
+    # Check disk usage
+    docker compose exec mongo df -h
+    
+    # Check database size
+    docker compose exec mongo mongosh --eval "db.stats(1024*1024*1024)"
+    
+    # Clean up old data
+    docker compose exec mongo mongosh meteor --eval '
+      db.records.deleteMany({
+        createdAt: { $lt: ISODate("2023-01-01") }
+      })
+    '
+    
+    # Compact collections
+    docker compose exec mongo mongosh meteor --eval '
+      db.runCommand({ compact: "records" })
+    '
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Backup & Restore" icon="floppy-disk" href="./backup">
+    Set up automated database backups
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="./monitoring">
+    Monitor database performance
+  </Card>
+  <Card title="Environment Variables" icon="gear" href="./environment-variables">
+    Configure database connection settings
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="./troubleshooting">
+    Resolve database issues
+  </Card>
+</CardGroup>

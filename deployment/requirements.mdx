@@ -1,0 +1,229 @@
+---
+title: 'System Requirements'
+description: 'Hardware and software requirements for deploying Movilidad'
+icon: 'list-check'
+---
+
+## Overview
+
+Before deploying Movilidad, ensure your system meets the minimum requirements for running a production Meteor.js application with MongoDB.
+
+## Server Requirements
+
+### Hardware Specifications
+
+<Info>
+These are minimum requirements. For production environments with high traffic, consider scaling up resources.
+</Info>
+
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| CPU | 2 cores | 4+ cores |
+| RAM | 2 GB | 4+ GB |
+| Storage | 10 GB | 20+ GB SSD |
+| Network | 100 Mbps | 1 Gbps |
+
+### Operating System
+
+Movilidad can be deployed on any system that supports Docker:
+
+- **Linux**: Ubuntu 20.04+, Debian 11+, CentOS 8+, RHEL 8+
+- **macOS**: 10.15+ (for development/testing)
+- **Windows**: Windows 10/11 with WSL2 (for development/testing)
+
+<Warning>
+For production deployments, we strongly recommend using Linux-based systems for better performance and stability.
+</Warning>
+
+## Software Requirements
+
+### Required Software
+
+<Steps>
+  <Step title="Docker Engine">
+    Docker Engine 20.10 or higher is required for containerized deployment.
+    
+    ```bash
+    # Verify Docker installation
+    docker --version
+    # Should output: Docker version 20.10.0 or higher
+    ```
+  </Step>
+  
+  <Step title="Docker Compose">
+    Docker Compose v2.0 or higher for orchestrating multi-container setup.
+    
+    ```bash
+    # Verify Docker Compose installation
+    docker compose version
+    # Should output: Docker Compose version v2.0.0 or higher
+    ```
+  </Step>
+  
+  <Step title="MongoDB">
+    MongoDB is included in the Docker setup (uses `mongo:latest` image).
+    
+    The application is compatible with MongoDB 4.4 through 7.0.
+  </Step>
+</Steps>
+
+### Development Requirements
+
+<Accordion title="For local development without Docker">
+  If you're running Movilidad locally without Docker:
+  
+  - **Node.js**: Version 20.15.1 (matches Meteor 3.0.1 requirements)
+  - **Meteor**: Version 2.16 (as specified in `.meteor/release`)
+  - **MongoDB**: Version 4.4 or higher
+  
+  ```bash
+  # Install Meteor
+  curl https://install.meteor.com/ | sh
+  
+  # Verify Meteor version
+  meteor --version
+  # Should output: Meteor 2.16
+  
+  # Install Node.js 20.15.1 (using nvm)
+  nvm install 20.15.1
+  nvm use 20.15.1
+  ```
+</Accordion>
+
+## Network Requirements
+
+### Port Access
+
+Ensure the following ports are available:
+
+| Port | Service | Required |
+|------|---------|----------|
+| 3000 | Application HTTP | Yes |
+| 27017 | MongoDB (internal) | Yes |
+| 443 | HTTPS (with reverse proxy) | Recommended |
+| 80 | HTTP redirect | Recommended |
+
+<Note>
+Port 27017 should **not** be exposed publicly. MongoDB communication happens internally between Docker containers.
+</Note>
+
+### Firewall Configuration
+
+```bash
+# Allow HTTP and HTTPS traffic
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 3000/tcp
+
+# Enable firewall
+sudo ufw enable
+```
+
+## Browser Compatibility
+
+Movilidad supports modern web browsers:
+
+- Chrome 90+
+- Firefox 88+
+- Safari 14+
+- Edge 90+
+
+<Info>
+The application uses React 18.2.0 and Ant Design 5.20.0, which require modern JavaScript features.
+</Info>
+
+## Dependencies Overview
+
+Movilidad relies on the following key technologies:
+
+### Core Stack
+
+- **Meteor.js**: 2.16 (Full-stack JavaScript framework)
+- **React**: 18.2.0 (UI framework)
+- **MongoDB**: Latest (NoSQL database)
+- **Node.js**: 20.15.1 (JavaScript runtime)
+
+### Key NPM Packages
+
+```json
+{
+  "antd": "^5.20.0",
+  "jsonwebtoken": "^9.0.2",
+  "multer": "^1.4.5-lts.1",
+  "moment": "^2.30.1",
+  "xlsx": "0.20.3",
+  "file-saver": "^2.0.5"
+}
+```
+
+### Meteor Packages
+
+- `accounts-password@2.4.0` - User authentication
+- `ostrio:files` - File upload handling
+- `ostrio:aes-crypto` - Encryption utilities
+- `quave:logged-user-react` - React authentication hooks
+- `netanelgilad:excel` - Excel file processing
+
+## Storage Requirements
+
+### Database Storage
+
+<Info>
+MongoDB uses the WiredTiger storage engine for better compression and performance.
+</Info>
+
+Estimate storage needs based on:
+
+- **User accounts**: ~1 KB per user
+- **Records/Documents**: Variable based on data size
+- **Uploaded files**: Stored in `/data` volume
+- **Database indexes**: ~10-20% of data size
+
+### Volume Mounts
+
+The Docker setup requires persistent volumes:
+
+- `/data/db` - MongoDB data directory
+- `/root/data` - Application file uploads
+
+## Pre-Deployment Checklist
+
+<Steps>
+  <Step title="System Updates">
+    Ensure your system is up to date:
+    ```bash
+    sudo apt update && sudo apt upgrade -y
+    ```
+  </Step>
+  
+  <Step title="Docker Installation">
+    Install Docker and Docker Compose if not already installed.
+  </Step>
+  
+  <Step title="Resource Allocation">
+    Verify sufficient disk space and memory:
+    ```bash
+    df -h  # Check disk space
+    free -h  # Check available memory
+    ```
+  </Step>
+  
+  <Step title="Network Configuration">
+    Configure firewall rules and ensure ports are accessible.
+  </Step>
+  
+  <Step title="Backup Plan">
+    Set up backup infrastructure for MongoDB and application data.
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Docker Setup" icon="docker" href="./docker">
+    Configure and deploy using Docker
+  </Card>
+  <Card title="Environment Variables" icon="gear" href="./environment-variables">
+    Configure application settings
+  </Card>
+</CardGroup>

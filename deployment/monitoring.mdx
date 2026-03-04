@@ -1,0 +1,545 @@
+---
+title: 'Monitoring'
+description: 'Monitor Movilidad application health and performance'
+icon: 'chart-line'
+---
+
+## Overview
+
+Monitoring is essential for maintaining a healthy Movilidad deployment. This guide covers health checks, logging, metrics collection, and alerting strategies.
+
+## Health Checks
+
+### Docker Health Checks
+
+Add health checks to your `docker-compose.yml`:
+
+```yaml
+services:
+  app:
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+  
+  mongo:
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+```
+
+<Info>
+**Health Check Parameters:**
+- `interval`: Time between checks
+- `timeout`: Maximum time for check to complete
+- `retries`: Number of failures before marking unhealthy
+- `start_period`: Grace period before starting checks
+</Info>
+
+### Check Container Health
+
+```bash
+# View health status
+docker compose ps
+
+# Detailed health check logs
+docker inspect --format='{{json .State.Health}}' movilidad-app-1 | jq
+
+# Monitor health status continuously
+watch -n 5 'docker compose ps'
+```
+
+## Application Logging
+
+### View Logs
+
+<CodeGroup>
+```bash Real-time Logs
+# Follow all service logs
+docker compose logs -f
+
+# Follow specific service
+docker compose logs -f app
+
+# Last 100 lines
+docker compose logs --tail=100 app
+
+# Logs since specific time
+docker compose logs --since 2024-01-01T00:00:00 app
+```
+
+```bash Filter Logs
+# Search for errors
+docker compose logs app | grep -i error
+
+# Search for specific user activity
+docker compose logs app | grep "username: admin"
+
+# Count error occurrences
+docker compose logs app | grep -i error | wc -l
+```
+
+```bash Export Logs
+# Save logs to file
+docker compose logs app > app-logs.txt
+
+# Save with timestamps
+docker compose logs -t app > app-logs-$(date +%Y%m%d).txt
+
+# Compress old logs
+docker compose logs --since 24h app | gzip > logs-$(date +%Y%m%d).log.gz
+```
+</CodeGroup>
+
+### Configure Logging Driver
+
+Improve log management with Docker logging drivers:
+
+<Tabs>
+  <Tab title="JSON File (Default)">
+    ```yaml
+    services:
+      app:
+        logging:
+          driver: json-file
+          options:
+            max-size: "10m"
+            max-file: "3"
+            compress: "true"
+    ```
+    
+    Automatically rotates logs when they reach 10MB, keeping 3 files.
+  </Tab>
+  
+  <Tab title="Syslog">
+    ```yaml
+    services:
+      app:
+        logging:
+          driver: syslog
+          options:
+            syslog-address: "tcp://192.168.1.100:514"
+            tag: "movilidad-app"
+    ```
+    
+    Sends logs to a syslog server for centralized logging.
+  </Tab>
+  
+  <Tab title="Fluentd">
+    ```yaml
+    services:
+      app:
+        logging:
+          driver: fluentd
+          options:
+            fluentd-address: localhost:24224
+            tag: movilidad.app
+    ```
+    
+    Integrates with Fluentd for advanced log processing.
+  </Tab>
+</Tabs>
+
+## Resource Monitoring
+
+### Docker Stats
+
+```bash
+# Real-time resource usage
+docker stats
+
+# Specific containers only
+docker stats movilidad-app-1 movilidad-mongo-1
+
+# Format output
+docker stats --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}"
+```
+
+### System Resource Monitoring
+
+<CodeGroup>
+```bash CPU and Memory
+# System overview
+htop
+
+# CPU usage
+mpstat 1 5
+
+# Memory usage
+free -h
+
+# Process tree
+pstree -p $(docker compose ps -q app)
+```
+
+```bash Disk Usage
+# Overall disk usage
+df -h
+
+# Docker disk usage
+docker system df -v
+
+# Volume sizes
+docker volume ls -q | xargs docker volume inspect --format '{{ .Name }}: {{ .Mountpoint }}' | xargs du -sh
+
+# MongoDB data size
+docker compose exec mongo mongosh meteor --eval "db.stats(1024*1024)"
+```
+
+```bash Network Monitoring
+# Network connections
+netstat -tulpn | grep :3000
+
+# Docker network inspect
+docker network inspect movilidad_default
+
+# Container network stats
+docker stats --no-stream --format "table {{.Container}}\t{{.NetIO}}"
+```
+</CodeGroup>
+
+## Database Monitoring
+
+### MongoDB Performance
+
+<Steps>
+  <Step title="Server Status">
+    ```javascript
+    // Connect to MongoDB
+    docker compose exec mongo mongosh meteor
+    
+    // Get server status
+    db.serverStatus()
+    
+    // Memory usage
+    db.serverStatus().mem
+    
+    // Connection stats
+    db.serverStatus().connections
+    ```
+  </Step>
+  
+  <Step title="Current Operations">
+    ```javascript
+    // Active operations
+    db.currentOp()
+    
+    // Long-running queries (> 1000ms)
+    db.currentOp({
+      "active": true,
+      "secs_running": { "$gt": 1 }
+    })
+    
+    // Kill a slow operation
+    db.killOp(12345)
+    ```
+  </Step>
+  
+  <Step title="Database Statistics">
+    ```javascript
+    // Database stats
+    db.stats(1024*1024)  // In MB
+    
+    // Collection stats
+    db.records.stats()
+    
+    // Index usage
+    db.records.aggregate([{ $indexStats: {} }])
+    ```
+  </Step>
+</Steps>
+
+### Enable MongoDB Profiling
+
+```javascript
+// Enable profiling for slow queries (>100ms)
+db.setProfilingLevel(1, { slowms: 100 })
+
+// View slow queries
+db.system.profile.find().sort({ ts: -1 }).limit(10).pretty()
+
+// Analyze a specific query
+db.system.profile.find({ ns: "meteor.records" }).sort({ ts: -1 }).limit(5)
+
+// Disable profiling
+db.setProfilingLevel(0)
+```
+
+## Metrics Collection
+
+### Prometheus & Grafana Setup
+
+Add monitoring stack to your deployment:
+
+```yaml
+# docker-compose.monitoring.yml
+version: '3.8'
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+  
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - '3001:3000'
+    volumes:
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+  
+  mongodb-exporter:
+    image: percona/mongodb_exporter:latest
+    ports:
+      - '9216:9216'
+    command:
+      - '--mongodb.uri=mongodb://mongo:27017'
+      - '--collect-all'
+    depends_on:
+      - mongo
+
+volumes:
+  prometheus-data:
+  grafana-data:
+```
+
+### Prometheus Configuration
+
+```yaml
+# prometheus.yml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'mongodb'
+    static_configs:
+      - targets: ['mongodb-exporter:9216']
+  
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['cadvisor:8080']
+```
+
+## Alerting
+
+### Basic Alert Script
+
+Create a simple monitoring script:
+
+```bash
+#!/bin/bash
+# monitor.sh - Basic health check script
+
+APP_URL="http://localhost:3000"
+ALERT_EMAIL="admin@example.com"
+
+# Check if app is responding
+if ! curl -sf "$APP_URL" > /dev/null; then
+  echo "App is down!" | mail -s "Movilidad Alert: App Down" "$ALERT_EMAIL"
+  exit 1
+fi
+
+# Check MongoDB
+if ! docker compose exec -T mongo mongosh --eval "db.adminCommand('ping')" > /dev/null 2>&1; then
+  echo "MongoDB is down!" | mail -s "Movilidad Alert: MongoDB Down" "$ALERT_EMAIL"
+  exit 1
+fi
+
+# Check disk space (alert if > 80%)
+DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+if [ "$DISK_USAGE" -gt 80 ]; then
+  echo "Disk usage is $DISK_USAGE%" | mail -s "Movilidad Alert: Low Disk Space" "$ALERT_EMAIL"
+fi
+
+echo "All checks passed"
+```
+
+Add to crontab:
+
+```bash
+# Run every 5 minutes
+*/5 * * * * /path/to/monitor.sh
+```
+
+### Advanced Alerting with Prometheus
+
+```yaml
+# alert.rules.yml
+groups:
+  - name: movilidad
+    interval: 30s
+    rules:
+      - alert: AppDown
+        expr: up{job="app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Movilidad app is down"
+      
+      - alert: HighMemoryUsage
+        expr: container_memory_usage_bytes{name="movilidad-app-1"} > 1.5e9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage detected"
+      
+      - alert: MongoDBDown
+        expr: mongodb_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MongoDB is down"
+```
+
+## Performance Metrics
+
+### Key Metrics to Monitor
+
+<AccordionGroup>
+  <Accordion title="Application Metrics">
+    - **Response Time**: Average request duration
+    - **Request Rate**: Requests per second
+    - **Error Rate**: Failed requests percentage
+    - **Active Users**: Concurrent user sessions
+    - **WebSocket Connections**: Real-time connection count
+  </Accordion>
+  
+  <Accordion title="Database Metrics">
+    - **Query Performance**: Average query execution time
+    - **Connection Pool**: Active/available connections
+    - **Document Count**: Total documents per collection
+    - **Index Usage**: Index hit rate
+    - **Disk I/O**: Read/write operations per second
+  </Accordion>
+  
+  <Accordion title="System Metrics">
+    - **CPU Usage**: Percentage per container
+    - **Memory Usage**: RAM consumption and available
+    - **Disk Usage**: Available storage space
+    - **Network I/O**: Inbound/outbound bandwidth
+    - **Container Restarts**: Unexpected restart count
+  </Accordion>
+</AccordionGroup>
+
+### Custom Monitoring Dashboard
+
+```javascript
+// server/monitoring.js - Custom metrics endpoint
+import { Meteor } from "meteor/meteor";
+import { WebApp } from "meteor/webapp";
+
+WebApp.connectHandlers.use('/health', (req, res) => {
+  const health = {
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    users: Meteor.users.find().count(),
+    records: Records.find().count(),
+  };
+  
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(health, null, 2));
+});
+
+// Access at: http://localhost:3000/health
+```
+
+## Log Analysis
+
+### Common Log Patterns
+
+<CodeGroup>
+```bash Error Analysis
+# Find error patterns
+docker compose logs app 2>&1 | grep -i "error" | sort | uniq -c | sort -rn
+
+# Authentication failures
+docker compose logs app 2>&1 | grep -i "login failed"
+
+# Database connection issues
+docker compose logs app 2>&1 | grep -i "mongo.*error"
+```
+
+```bash Performance Analysis
+# Slow queries
+docker compose exec mongo mongosh meteor --eval '
+  db.system.profile.find({ millis: { $gt: 100 } }).sort({ ts: -1 }).limit(10)
+'
+
+# Request timing
+docker compose logs app 2>&1 | grep -E "[0-9]+ms" | awk '{print $NF}'
+```
+
+```bash User Activity
+# Login attempts
+docker compose logs app 2>&1 | grep -i "login"
+
+# API endpoints accessed
+docker compose logs app 2>&1 | grep -E "GET|POST|PUT|DELETE"
+
+# Active users timeline
+docker compose logs app 2>&1 | grep "user" | awk '{print $1, $2}' | uniq -c
+```
+</CodeGroup>
+
+## Monitoring Checklist
+
+<Steps>
+  <Step title="Daily Checks">
+    - [ ] Verify all containers are running
+    - [ ] Check application accessibility
+    - [ ] Review error logs
+    - [ ] Monitor disk space
+  </Step>
+  
+  <Step title="Weekly Checks">
+    - [ ] Analyze slow query logs
+    - [ ] Review resource usage trends
+    - [ ] Check backup success
+    - [ ] Update dependencies if needed
+  </Step>
+  
+  <Step title="Monthly Checks">
+    - [ ] Database maintenance (compact, reindex)
+    - [ ] Log rotation and cleanup
+    - [ ] Security updates
+    - [ ] Performance optimization review
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Backup & Restore" icon="floppy-disk" href="./backup">
+    Set up automated backups
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="./troubleshooting">
+    Debug common issues
+  </Card>
+  <Card title="Database Setup" icon="database" href="./database-setup">
+    Optimize database performance
+  </Card>
+  <Card title="Environment Variables" icon="gear" href="./environment-variables">
+    Configure monitoring settings
+  </Card>
+</CardGroup>

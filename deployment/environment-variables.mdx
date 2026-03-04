@@ -1,0 +1,409 @@
+---
+title: 'Environment Variables'
+description: 'Configure Movilidad application settings and environment variables'
+icon: 'gear'
+---
+
+## Overview
+
+Movilidad uses environment variables for configuration and settings.json for application-specific settings. This page covers all configuration options for deployment.
+
+## Core Environment Variables
+
+### Required Variables
+
+These variables must be set for the application to function correctly:
+
+<CodeGroup>
+```bash .env File
+# Application Root URL
+ROOT_URL=http://localhost
+
+# MongoDB Connection
+MONGO_URL=mongodb://mongo:27017/meteor
+
+# Application Port
+PORT=3000
+```
+
+```bash Docker Compose
+environment:
+  ROOT_URL: ${APP_ROOT_URL:-http://localhost}
+  MONGO_URL: mongodb://mongo:27017/meteor
+  PORT: 3000
+```
+</CodeGroup>
+
+### Variable Definitions
+
+<Accordion title="ROOT_URL">
+  **Type**: String (URL)
+  
+  **Description**: The base URL where your application is accessible. This is critical for:
+  - OAuth redirects
+  - Email links
+  - Asset loading
+  - WebSocket connections
+  
+  **Examples**:
+  ```bash
+  # Development
+  ROOT_URL=http://localhost:3000
+  
+  # Production (HTTP)
+  ROOT_URL=http://movilidad.example.com
+  
+  # Production (HTTPS)
+  ROOT_URL=https://movilidad.example.com
+  ```
+  
+  <Warning>
+  The ROOT_URL must include the protocol (http:// or https://) and should NOT have a trailing slash.
+  </Warning>
+</Accordion>
+
+<Accordion title="MONGO_URL">
+  **Type**: String (MongoDB connection URI)
+  
+  **Description**: MongoDB connection string for the application database.
+  
+  **Format**: `mongodb://[username:password@]host:port/database`
+  
+  **Examples**:
+  ```bash
+  # Docker internal network (no auth)
+  MONGO_URL=mongodb://mongo:27017/meteor
+  
+  # With authentication
+  MONGO_URL=mongodb://admin:password@mongo:27017/meteor?authSource=admin
+  
+  # External MongoDB
+  MONGO_URL=mongodb://user:pass@mongodb.example.com:27017/movilidad
+  
+  # MongoDB Atlas
+  MONGO_URL=mongodb+srv://user:pass@cluster.mongodb.net/movilidad
+  ```
+  
+  <Info>
+  The database name (`meteor` in the default setup) will be created automatically if it doesn't exist.
+  </Info>
+</Accordion>
+
+<Accordion title="PORT">
+  **Type**: Integer
+  
+  **Description**: The port number the application listens on inside the container.
+  
+  **Default**: 3000
+  
+  **Examples**:
+  ```bash
+  PORT=3000  # Default
+  PORT=8080  # Alternative port
+  ```
+  
+  <Note>
+  When using Docker, you typically map this internal port to a host port in docker-compose.yml:
+  ```yaml
+  ports:
+    - '80:3000'  # Map host port 80 to container port 3000
+  ```
+  </Note>
+</Accordion>
+
+## Optional Environment Variables
+
+### Performance & Optimization
+
+<Accordion title="MONGO_OPLOG_URL">
+  **Type**: String (MongoDB connection URI)
+  
+  **Description**: Enable oplog tailing for real-time reactivity improvements.
+  
+  ```bash
+  MONGO_OPLOG_URL=mongodb://mongo:27017/local
+  ```
+  
+  <Tip>
+  Oplog tailing significantly improves the performance of reactive queries by using MongoDB's replication oplog to detect changes.
+  </Tip>
+</Accordion>
+
+<Accordion title="METEOR_SETTINGS">
+  **Type**: JSON String
+  
+  **Description**: Pass settings directly via environment variable instead of settings.json.
+  
+  ```bash
+  METEOR_SETTINGS='{"private":{"admin":{"user":"admin","password":"secure_pass"}}}'
+  ```
+  
+  <Warning>
+  Avoid putting sensitive data in environment variables when using Docker Compose. Use Docker secrets or external secret management instead.
+  </Warning>
+</Accordion>
+
+### Node.js Settings
+
+```bash
+# Increase memory limit for large datasets
+NODE_OPTIONS="--max-old-space-size=4096"
+
+# Enable source maps for debugging
+NODE_OPTIONS="--enable-source-maps"
+```
+
+## Settings.json Configuration
+
+The `settings.json` file contains application-specific configuration that gets loaded at startup.
+
+### Current Configuration
+
+<CodeGroup>
+```json settings.json
+{
+  "private": {
+    "admin": {
+      "user": "admin",
+      "password": "admin"
+    }
+  }
+}
+```
+
+```javascript Usage in Code
+import { Meteor } from "meteor/meteor";
+import settings from "../settings.json";
+
+Meteor.startup(async () => {
+  const admin = Meteor.users.findOne({ 
+    username: settings.private.admin.user 
+  });
+  
+  if (!admin) {
+    Accounts.createUser({
+      username: settings.private.admin.user,
+      password: settings.private.admin.password,
+      profile: { role: "admin" },
+    });
+  }
+});
+```
+</CodeGroup>
+
+### Structure Explanation
+
+<Accordion title="private Section">
+  Settings in the `private` section are **only accessible on the server**.
+  
+  ```json
+  {
+    "private": {
+      "admin": {
+        "user": "admin",
+        "password": "admin"
+      }
+    }
+  }
+  ```
+  
+  Access in server code:
+  ```javascript
+  import settings from "../settings.json";
+  console.log(settings.private.admin.user);
+  ```
+</Accordion>
+
+<Accordion title="public Section" defaultOpen={false}>
+  Settings in the `public` section are accessible on both client and server.
+  
+  ```json
+  {
+    "public": {
+      "appName": "Movilidad",
+      "features": {
+        "exportEnabled": true
+      }
+    }
+  }
+  ```
+  
+  Access in client/server code:
+  ```javascript
+  import { Meteor } from "meteor/meteor";
+  console.log(Meteor.settings.public.appName);
+  ```
+</Accordion>
+
+## Production Configuration
+
+### Secure Settings Example
+
+<Warning>
+**Security Best Practices:**
+
+1. Never commit production credentials to version control
+2. Change default admin password immediately
+3. Use strong, unique passwords
+4. Consider using environment variables for sensitive data
+5. Enable MongoDB authentication in production
+</Warning>
+
+<CodeGroup>
+```json settings.production.json
+{
+  "private": {
+    "admin": {
+      "user": "admin",
+      "password": "CHANGE_THIS_STRONG_PASSWORD"
+    },
+    "mongodb": {
+      "username": "app_user",
+      "password": "CHANGE_THIS_DB_PASSWORD"
+    }
+  },
+  "public": {
+    "appName": "Movilidad",
+    "environment": "production"
+  }
+}
+```
+
+```yaml docker-compose.production.yml
+services:
+  app:
+    environment:
+      ROOT_URL: https://movilidad.example.com
+      MONGO_URL: mongodb://app_user:${DB_PASSWORD}@mongo:27017/meteor?authSource=admin
+      MONGO_OPLOG_URL: mongodb://app_user:${DB_PASSWORD}@mongo:27017/local?authSource=admin
+      PORT: 3000
+      NODE_OPTIONS: "--max-old-space-size=4096"
+    volumes:
+      - ./settings.production.json:/opt/bundle/bundle/programs/server/assets/app/settings.json:ro
+```
+</CodeGroup>
+
+## Configuration by Environment
+
+<Tabs>
+  <Tab title="Development">
+    ```bash
+    # .env.development
+    ROOT_URL=http://localhost:3000
+    MONGO_URL=mongodb://mongo:27017/meteor_dev
+    PORT=3000
+    NODE_ENV=development
+    ```
+    
+    Characteristics:
+    - Local MongoDB without authentication
+    - Hot module replacement enabled
+    - Debug logging enabled
+    - Source maps included
+  </Tab>
+  
+  <Tab title="Staging">
+    ```bash
+    # .env.staging
+    ROOT_URL=https://staging.movilidad.example.com
+    MONGO_URL=mongodb://user:pass@mongo:27017/meteor_staging?authSource=admin
+    MONGO_OPLOG_URL=mongodb://user:pass@mongo:27017/local?authSource=admin
+    PORT=3000
+    NODE_ENV=production
+    NODE_OPTIONS="--max-old-space-size=2048"
+    ```
+    
+    Characteristics:
+    - Production-like environment
+    - MongoDB with authentication
+    - Testing with production builds
+    - Performance monitoring enabled
+  </Tab>
+  
+  <Tab title="Production">
+    ```bash
+    # .env.production
+    ROOT_URL=https://movilidad.example.com
+    MONGO_URL=mongodb://user:SECURE_PASS@mongo:27017/meteor?authSource=admin
+    MONGO_OPLOG_URL=mongodb://user:SECURE_PASS@mongo:27017/local?authSource=admin
+    PORT=3000
+    NODE_ENV=production
+    NODE_OPTIONS="--max-old-space-size=4096"
+    ```
+    
+    Characteristics:
+    - HTTPS required
+    - Strong authentication
+    - Optimized memory settings
+    - Monitoring and alerting
+    - Regular backups
+  </Tab>
+</Tabs>
+
+## Docker Secrets (Recommended for Production)
+
+Instead of using plain environment variables, use Docker secrets for sensitive data:
+
+```yaml
+version: '3.8'
+
+services:
+  app:
+    environment:
+      ROOT_URL: https://movilidad.example.com
+      MONGO_URL_FILE: /run/secrets/mongo_url
+      PORT: 3000
+    secrets:
+      - mongo_url
+      - admin_password
+
+secrets:
+  mongo_url:
+    file: ./secrets/mongo_url.txt
+  admin_password:
+    file: ./secrets/admin_password.txt
+```
+
+## Environment Variable Validation
+
+Add this startup check to validate required environment variables:
+
+```javascript
+// server/startup/validateEnv.js
+import { Meteor } from "meteor/meteor";
+
+Meteor.startup(() => {
+  const required = ['ROOT_URL', 'MONGO_URL', 'PORT'];
+  const missing = required.filter(key => !process.env[key]);
+  
+  if (missing.length > 0) {
+    console.error('Missing required environment variables:', missing);
+    process.exit(1);
+  }
+  
+  // Validate ROOT_URL format
+  if (!process.env.ROOT_URL.match(/^https?:\/\//)) {
+    console.error('ROOT_URL must include protocol (http:// or https://)');
+    process.exit(1);
+  }
+  
+  console.log('✓ Environment variables validated');
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Database Setup" icon="database" href="./database-setup">
+    Configure MongoDB and initialize data
+  </Card>
+  <Card title="Docker Deployment" icon="docker" href="./docker">
+    Deploy with Docker Compose
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="./monitoring">
+    Monitor application health
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="./troubleshooting">
+    Debug configuration issues
+  </Card>
+</CardGroup>

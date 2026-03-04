@@ -1,0 +1,105 @@
+---
+title: 'Document Model'
+description: 'Data structure for document storage'
+---
+
+## Overview
+
+The Document model is a MongoDB collection used to store document-related data in the Movilidad system. Unlike the Photo model which uses FilesCollection, the Documents collection is a standard Mongo collection.
+
+## Collection Details
+
+<ResponseField name="Collection Name" type="string">
+  `documents`
+</ResponseField>
+
+<ResponseField name="Database" type="string">
+  MongoDB
+</ResponseField>
+
+## Schema
+
+The Documents collection uses MongoDB's flexible schema. Based on the codebase, this collection is defined but the specific fields are not enforced at the collection level.
+
+### Common Fields
+
+While the schema is flexible, documents typically include:
+
+<ResponseField name="_id" type="string">
+  MongoDB document ID (auto-generated)
+</ResponseField>
+
+<ResponseField name="recordId" type="string">
+  Reference to the associated record (NUMERO_DE_LA_ORDEN)
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  Type or category of the document
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Document name or title
+</ResponseField>
+
+<ResponseField name="createdAt" type="Date">
+  Document creation timestamp
+</ResponseField>
+
+<ResponseField name="uploadedBy" type="string">
+  User ID of the person who uploaded the document
+</ResponseField>
+
+## Example Document
+
+```json
+{
+  "_id": "doc123abc456",
+  "recordId": "ORD-12345",
+  "type": "acuerdo_pago",
+  "name": "Acuerdo de Pago - Juan Pérez",
+  "createdAt": "2024-03-15T10:30:00.000Z",
+  "uploadedBy": "manager789",
+  "status": "active",
+  "notes": "Cliente firmó acuerdo por 6 meses"
+}
+```
+
+## Usage
+
+The documents collection is available for storing:
+
+- Payment agreements
+- Service contracts
+- Legal documents
+- Supporting documentation for records
+- Administrative forms
+
+## Implementation
+
+```javascript
+import { Mongo } from "meteor/mongo";
+
+export const documentsCollection = new Mongo.Collection("documents");
+```
+
+## API Access
+
+<Note>
+  Currently, there are no REST API endpoints defined for document management in the `recordsEndpoints.js` file. Document operations are likely handled through Meteor methods or direct database access in the admin interface.
+</Note>
+
+## Related Models
+
+- [Record Model](/api/models/record) - Documents are typically associated with records
+- [Photo Model](/api/models/photo) - Similar concept but for photo files
+- [User Model](/api/models/user) - Documents track who uploaded them
+
+## Future Development
+
+Potential REST API endpoints for documents:
+
+- `POST /management/documents/:orden` - Upload document for a record
+- `GET /management/documents/:orden` - Get all documents for a record
+- `DELETE /management/documents/:id` - Delete a document
+
+These endpoints would follow the same authentication pattern as the existing photo upload endpoint.

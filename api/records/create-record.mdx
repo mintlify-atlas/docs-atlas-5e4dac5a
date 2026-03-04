@@ -1,0 +1,199 @@
+---
+title: 'Create/Update Record'
+description: 'Create or update a management record'
+---
+
+## POST /management
+
+Creates a new record or updates an existing record in the management system. Records are uniquely identified by `NUMERO_DE_LA_ORDEN`.
+
+<Note>
+  This endpoint requires authentication with a management role. Include the JWT token in the Authorization header.
+</Note>
+
+### Authentication
+
+```
+Authorization: Bearer {token}
+```
+
+The authenticated user must have `profile.role === "management"` or the request will be denied.
+
+### Request Body
+
+<ParamField body="NUMERO_DE_LA_ORDEN" type="string" required>
+  Unique order number that identifies the record
+</ParamField>
+
+<ParamField body="fecha_gestion" type="string" required>
+  Management date. Accepts multiple formats: "DD/MM/YYYY", "YYYY/MM/DD", "D/M/YYYY", or ISO 8601
+</ParamField>
+
+<ParamField body="numero_producto" type="string">
+  Product number
+</ParamField>
+
+<ParamField body="resultado_de_gestion" type="string">
+  Management result/outcome
+</ParamField>
+
+<ParamField body="causal_de_pago" type="string">
+  Payment reason/cause
+</ParamField>
+
+<ParamField body="causal_de_no_pago" type="string">
+  Non-payment reason/cause
+</ParamField>
+
+<ParamField body="estado_servicio" type="string">
+  Service status
+</ParamField>
+
+<ParamField body="recibo" type="string">
+  Receipt number
+</ParamField>
+
+<ParamField body="valor_recibo" type="string">
+  Receipt value/amount
+</ParamField>
+
+<ParamField body="lectura" type="string">
+  Meter reading
+</ParamField>
+
+<ParamField body="tipo_de_vivienda" type="string">
+  Housing type
+</ParamField>
+
+<ParamField body="contacto" type="string">
+  Contact name
+</ParamField>
+
+<ParamField body="telefono_sugerido" type="string">
+  Suggested phone number
+</ParamField>
+
+<ParamField body="observacion" type="string">
+  Observations/notes
+</ParamField>
+
+<ParamField body="ubicacion" type="object">
+  Location coordinates (lat/lng)
+</ParamField>
+
+<ParamField body="status" type="string">
+  Record status (e.g., "pending", "reviewed")
+</ParamField>
+
+<ParamField body="uso_del_predio" type="string">
+  Property usage
+</ParamField>
+
+<ParamField body="tipo_habitante" type="string">
+  Resident type
+</ParamField>
+
+<ParamField body="clase_predio" type="string">
+  Property class
+</ParamField>
+
+<ParamField body="tipo_comercio" type="string">
+  Commerce type
+</ParamField>
+
+<ParamField body="nivel_estado_servicio" type="string">
+  Service status level
+</ParamField>
+
+<ParamField body="cuota_inicial_ofrece" type="string">
+  Initial quota offered
+</ParamField>
+
+<ParamField body="cuota_mensual" type="string">
+  Monthly quota
+</ParamField>
+
+<ParamField body="numero_de_personas" type="string">
+  Number of people
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="string">
+  ```
+  Record added successfully
+  ```
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="401 Unauthorized">
+  Returned when no token is provided or system is in maintenance mode
+  ```
+  Unauthorized: No token provided
+  ```
+  or
+  ```
+  Unauthorized
+  ```
+</ResponseField>
+
+<ResponseField name="403 Forbidden">
+  Returned when token is invalid or user doesn't have management role
+  ```json
+  {
+    "message": "Invalid token"
+  }
+  ```
+  or
+  ```json
+  {
+    "message": "Access denied"
+  }
+  ```
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST https://your-domain.com/management \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -d '{
+    "NUMERO_DE_LA_ORDEN": "ORD-12345",
+    "fecha_gestion": "15/03/2024",
+    "numero_producto": "PROD-001",
+    "resultado_de_gestion": "Contacto exitoso",
+    "causal_de_pago": "Acuerdo de pago",
+    "estado_servicio": "Activo",
+    "recibo": "REC-98765",
+    "valor_recibo": "150000",
+    "lectura": "12345",
+    "tipo_de_vivienda": "Casa",
+    "contacto": "Juan Pérez",
+    "telefono_sugerido": "3001234567",
+    "observacion": "Cliente acepta plan de pagos",
+    "ubicacion": {
+      "lat": 10.9685,
+      "lng": -74.7813
+    },
+    "status": "reviewed",
+    "uso_del_predio": "Residencial",
+    "tipo_habitante": "Propietario",
+    "clase_predio": "Urbano",
+    "numero_de_personas": "4"
+  }'
+```
+
+### Example Response
+
+```
+Record added successfully
+```
+
+## Behavior Notes
+
+- **Upsert Logic**: If a record with the same `NUMERO_DE_LA_ORDEN` exists, it will be updated. Otherwise, a new record is created.
+- **Date Handling**: The `fecha_gestion` is normalized to the start of day (midnight) in the server timezone
+- **Auto-Update**: The `updatedAt` field is automatically set to the current date (start of day)
+- **Field Updates**: All provided fields are set using `$set`, preserving any fields not included in the request

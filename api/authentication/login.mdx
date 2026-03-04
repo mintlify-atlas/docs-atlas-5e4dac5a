@@ -1,0 +1,80 @@
+---
+title: 'Login'
+description: 'Authenticate a user and obtain a JWT access token'
+---
+
+## POST /login
+
+Authenticates a user with username and password credentials and returns a JWT token for subsequent API requests.
+
+### Request
+
+<ParamField body="username" type="string" required>
+  The user's username
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The user's password
+</ParamField>
+
+### Response
+
+<ResponseField name="token" type="string">
+  JWT access token for authenticating subsequent requests. This token should be included in the Authorization header as `Bearer {token}`.
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="401 Unauthorized">
+  Returned when credentials are invalid
+  ```json
+  {
+    "message": "Invalid username or password"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="400 Bad Request">
+  Returned when request data is invalid or missing required fields
+  ```json
+  {
+    "message": "Invalid data"
+  }
+  ```
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST https://your-domain.com/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "manager123",
+    "password": "securepassword"
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2NWY3YTNiMmQ4ZTRhMjAwMTJhYmNkZWYiLCJpYXQiOjE2OTg3NjU0MzJ9.K8Hn2pX9vQ7mR5nL3tY8wZ4kJ6sD1fG0hT2eU9iO7pA"
+}
+```
+
+## Usage Notes
+
+- The returned JWT token does not expire by default (unless explicitly configured)
+- Store the token securely on the client side
+- Include the token in all authenticated requests using the Authorization header
+- For token refresh, use the [Refresh Token](/api/authentication/refresh-token) endpoint
+
+## Authentication Flow
+
+1. Send POST request to `/login` with username and password
+2. Receive JWT token in response
+3. Store token securely
+4. Include token in Authorization header for all subsequent API requests:
+   ```
+   Authorization: Bearer {your-token-here}
+   ```

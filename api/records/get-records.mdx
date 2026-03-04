@@ -1,0 +1,125 @@
+---
+title: 'Get Records'
+description: 'Retrieve records for a specific user'
+---
+
+## GET /management/:username
+
+Retrieves all management records assigned to a specific user (identified by username).
+
+<Note>
+  This endpoint requires authentication with a management role. Include the JWT token in the Authorization header.
+</Note>
+
+### Authentication
+
+```
+Authorization: Bearer {token}
+```
+
+The authenticated user must have `profile.role === "management"` or the request will be denied.
+
+### Path Parameters
+
+<ParamField path="username" type="string" required>
+  The username of the manager (GESTOR) whose records you want to retrieve
+</ParamField>
+
+### Response
+
+<ResponseField name="records" type="array">
+  Array of record objects assigned to the specified user. See the [Record Model](/api/models/record) for field details.
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="401 Unauthorized">
+  Returned when no token is provided or system is in maintenance mode
+  ```
+  Unauthorized: No token provided
+  ```
+</ResponseField>
+
+<ResponseField name="403 Forbidden">
+  Returned when token is invalid or user doesn't have management role
+  ```json
+  {
+    "message": "Invalid token"
+  }
+  ```
+  or
+  ```json
+  {
+    "message": "Access denied"
+  }
+  ```
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET https://your-domain.com/management/jperez \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+### Example Response
+
+```json
+[
+  {
+    "_id": "abc123def456",
+    "NUMERO_DE_LA_ORDEN": "ORD-12345",
+    "GESTOR": "jperez",
+    "fecha_gestion": "2024-03-15T00:00:00.000Z",
+    "numero_producto": "PROD-001",
+    "resultado_de_gestion": "Contacto exitoso",
+    "causal_de_pago": "Acuerdo de pago",
+    "estado_servicio": "Activo",
+    "recibo": "REC-98765",
+    "valor_recibo": "150000",
+    "lectura": "12345",
+    "tipo_de_vivienda": "Casa",
+    "contacto": "Juan Pérez",
+    "telefono_sugerido": "3001234567",
+    "observacion": "Cliente acepta plan de pagos",
+    "ubicacion": {
+      "lat": 10.9685,
+      "lng": -74.7813
+    },
+    "status": "reviewed",
+    "uso_del_predio": "Residencial",
+    "tipo_habitante": "Propietario",
+    "clase_predio": "Urbano",
+    "numero_de_personas": "4",
+    "fotos": ["fileId123", "fileId456"],
+    "updatedAt": "2024-03-15T00:00:00.000Z",
+    "leaderId": "leader789",
+    "project": "sierra",
+    "DEUDA_TOTAL_ASIGNADA": "500000",
+    "INDICADOR": "NORMALIZACION",
+    "DESCRIPCION_TIPO_PRODUCTO": "GAS"
+  },
+  {
+    "_id": "xyz789ghi012",
+    "NUMERO_DE_LA_ORDEN": "ORD-12346",
+    "GESTOR": "jperez",
+    "status": "pending",
+    "fecha_asignacion": "15/03/2024",
+    "DEUDA_TOTAL_ASIGNADA": "300000",
+    "INDICADOR": "CONTENCION",
+    "DESCRIPCION_TIPO_PRODUCTO": "BRILLA SURTIGAS"
+  }
+]
+```
+
+## Query Behavior
+
+- Returns all records where `GESTOR` field matches the provided username
+- Returns an empty array `[]` if no records are found for the user
+- Records include all fields stored in the database (see [Record Model](/api/models/record))
+
+## Use Cases
+
+- **Mobile App**: Fetch all records assigned to the logged-in manager for offline access
+- **Dashboard**: Display pending and completed records for a specific user
+- **Reporting**: Retrieve user-specific records for performance analysis

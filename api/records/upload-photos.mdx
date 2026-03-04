@@ -1,0 +1,142 @@
+---
+title: 'Upload Photos'
+description: 'Upload photos for a specific record'
+---
+
+## POST /management/photos/:orden
+
+Uploads up to two photos (foto1 and foto2) for a specific record identified by order number.
+
+<Note>
+  This endpoint requires authentication with a management role and uses multipart/form-data encoding.
+</Note>
+
+### Authentication
+
+```
+Authorization: Bearer {token}
+```
+
+The authenticated user must have `profile.role === "management"` or the request will be denied.
+
+### Path Parameters
+
+<ParamField path="orden" type="string" required>
+  The order number (NUMERO_DE_LA_ORDEN) of the record to attach photos to
+</ParamField>
+
+### Request Body (multipart/form-data)
+
+<ParamField body="foto1" type="file">
+  First photo file. Accepted formats: PNG, JPG, JPEG. Maximum size: 10MB
+</ParamField>
+
+<ParamField body="foto2" type="file">
+  Second photo file. Accepted formats: PNG, JPG, JPEG. Maximum size: 10MB
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="string">
+  ```
+  Record added successfully
+  ```
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="400 Bad Request">
+  Returned when file upload fails
+  ```
+  Error uploading files
+  ```
+</ResponseField>
+
+<ResponseField name="401 Unauthorized">
+  Returned when no token is provided
+  ```
+  Unauthorized: No token provided
+  ```
+</ResponseField>
+
+<ResponseField name="403 Forbidden">
+  Returned when token is invalid or user doesn't have management role
+  ```json
+  {
+    "message": "Invalid token"
+  }
+  ```
+  or
+  ```json
+  {
+    "message": "Access denied"
+  }
+  ```
+</ResponseField>
+
+### Example Request (JavaScript)
+
+```javascript
+const formData = new FormData();
+formData.append('foto1', file1); // File object
+formData.append('foto2', file2); // File object
+
+fetch('https://your-domain.com/management/photos/ORD-12345', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+  },
+  body: formData
+})
+  .then(response => response.text())
+  .then(data => console.log(data));
+```
+
+### Example Request (cURL)
+
+```bash
+curl -X POST https://your-domain.com/management/photos/ORD-12345 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -F "foto1=@/path/to/photo1.jpg" \
+  -F "foto2=@/path/to/photo2.jpg"
+```
+
+### Example Response
+
+```
+Record added successfully
+```
+
+## Photo Storage
+
+- Photos are stored using the Meteor FilesCollection (ostrio:files package)
+- Each photo is assigned a unique 10-character fileId
+- Photos are stored in the `/data/photos` directory on the server
+- The record is updated with an array of fileIds: `["fileId1", "fileId2"]`
+
+## File Validation
+
+<Warning>
+  Files must meet the following requirements:
+  - **Format**: PNG, JPG, or JPEG only
+  - **Size**: Maximum 10MB per file
+  - Invalid files will be rejected during upload
+</Warning>
+
+## Behavior Notes
+
+- **Optional Fields**: Both foto1 and foto2 are optional. You can upload just one photo if needed.
+- **Upsert Logic**: If the record with the given `NUMERO_DE_LA_ORDEN` doesn't exist, it will be created with just the photos field.
+- **Overwrite**: Uploading new photos will replace the existing photos array in the record.
+- **Array Storage**: Photos are stored as an array of fileIds in the `fotos` field.
+- **Null Handling**: If a photo field is not provided, it will be stored as `null` in the array.
+
+## Retrieving Photos
+
+After uploading, the photo fileIds are stored in the record's `fotos` array. To retrieve photos:
+
+1. Get the record using [GET /management/:username](/api/records/get-records)
+2. Extract the fileIds from the `fotos` array
+3. Access photos using the FilesCollection URL pattern (implementation specific)
+
+See the [Photo Model](/api/models/photo) for more details on the photo structure.

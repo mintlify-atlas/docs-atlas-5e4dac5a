@@ -1,0 +1,235 @@
+---
+title: 'Record Model'
+description: 'Data structure for management records'
+---
+
+## Overview
+
+The Record model represents a management record in the Movilidad system. Records track customer interactions, payment agreements, service status, and related data for utility management.
+
+## Schema
+
+### Core Identifiers
+
+<ResponseField name="_id" type="string">
+  MongoDB document ID. Auto-generated 10-character random ID.
+</ResponseField>
+
+<ResponseField name="NUMERO_DE_LA_ORDEN" type="string">
+  Unique order number. Primary business identifier for the record.
+</ResponseField>
+
+<ResponseField name="GESTOR" type="string">
+  Username of the manager assigned to this record.
+</ResponseField>
+
+<ResponseField name="leaderId" type="string">
+  ID of the team leader who assigned this record.
+</ResponseField>
+
+<ResponseField name="project" type="string">
+  Project identifier (e.g., "sierra").
+</ResponseField>
+
+### Dates and Status
+
+<ResponseField name="fecha_gestion" type="Date">
+  Management date. Normalized to start of day (midnight).
+</ResponseField>
+
+<ResponseField name="fecha_asignacion" type="string">
+  Assignment date in DD/MM/YYYY format.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="Date">
+  Last update timestamp. Normalized to start of day.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Record status. Common values:
+  - `"pending"` - Assigned but not yet processed
+  - `"reviewed"` - Completed/processed
+</ResponseField>
+
+### Product and Service Information
+
+<ResponseField name="numero_producto" type="string">
+  Product number.
+</ResponseField>
+
+<ResponseField name="DESCRIPCION_TIPO_PRODUCTO" type="string">
+  Product type description. Common values:
+  - `"GAS"` - Gas service
+  - `"BRILLA SURTIGAS"` - Brilla financing
+  - `"SERVICIOS FINANCIEROS"` - Financial services
+</ResponseField>
+
+<ResponseField name="estado_servicio" type="string">
+  Current service status.
+</ResponseField>
+
+<ResponseField name="nivel_estado_servicio" type="string">
+  Service status level/tier.
+</ResponseField>
+
+### Financial Information
+
+<ResponseField name="DEUDA_TOTAL_ASIGNADA" type="string">
+  Total assigned debt amount (stored as string).
+</ResponseField>
+
+<ResponseField name="recibo" type="string">
+  Receipt number.
+</ResponseField>
+
+<ResponseField name="valor_recibo" type="string">
+  Receipt amount/value.
+</ResponseField>
+
+<ResponseField name="cuota_inicial_ofrece" type="string">
+  Initial quota/down payment offered.
+</ResponseField>
+
+<ResponseField name="cuota_mensual" type="string">
+  Monthly payment quota.
+</ResponseField>
+
+<ResponseField name="INDICADOR" type="string">
+  Financial indicator. Common values:
+  - `"NORMALIZACION"` / `"NORMALIZACIÓN"` - Normalization
+  - `"CONTENCION"` / `"CONTENCIÓN"` - Containment
+  - `"CASTIGADO"` - Written off
+</ResponseField>
+
+### Management Results
+
+<ResponseField name="resultado_de_gestion" type="string">
+  Management outcome/result.
+</ResponseField>
+
+<ResponseField name="causal_de_pago" type="string">
+  Payment reason/cause (when payment is made).
+</ResponseField>
+
+<ResponseField name="causal_de_no_pago" type="string">
+  Non-payment reason/cause (when payment is not made).
+</ResponseField>
+
+### Property Information
+
+<ResponseField name="tipo_de_vivienda" type="string">
+  Housing type (e.g., "Casa", "Apartamento").
+</ResponseField>
+
+<ResponseField name="uso_del_predio" type="string">
+  Property usage (e.g., "Residencial", "Comercial").
+</ResponseField>
+
+<ResponseField name="clase_predio" type="string">
+  Property class (e.g., "Urbano", "Rural").
+</ResponseField>
+
+<ResponseField name="tipo_comercio" type="string">
+  Type of commerce (for commercial properties).
+</ResponseField>
+
+### Resident Information
+
+<ResponseField name="tipo_habitante" type="string">
+  Resident type (e.g., "Propietario", "Arrendatario").
+</ResponseField>
+
+<ResponseField name="numero_de_personas" type="string">
+  Number of people in the household.
+</ResponseField>
+
+### Contact Information
+
+<ResponseField name="contacto" type="string">
+  Contact person name.
+</ResponseField>
+
+<ResponseField name="telefono_sugerido" type="string">
+  Suggested/updated phone number.
+</ResponseField>
+
+### Additional Data
+
+<ResponseField name="lectura" type="string">
+  Meter reading value.
+</ResponseField>
+
+<ResponseField name="observacion" type="string">
+  Notes and observations from the manager.
+</ResponseField>
+
+<ResponseField name="ubicacion" type="object">
+  GPS coordinates of the location.
+  
+  Properties:
+  - `lat` (number): Latitude
+  - `lng` (number): Longitude
+</ResponseField>
+
+<ResponseField name="fotos" type="array">
+  Array of photo file IDs. Contains 0-2 fileIds (strings) referencing photos in the photos collection.
+  
+  Example: `["abc1234567", "xyz9876543"]`
+</ResponseField>
+
+## Example Record
+
+```json
+{
+  "_id": "abc123def4",
+  "NUMERO_DE_LA_ORDEN": "ORD-12345",
+  "GESTOR": "jperez",
+  "leaderId": "leader789",
+  "project": "sierra",
+  "fecha_gestion": "2024-03-15T00:00:00.000Z",
+  "fecha_asignacion": "15/03/2024",
+  "updatedAt": "2024-03-15T00:00:00.000Z",
+  "status": "reviewed",
+  "numero_producto": "PROD-001",
+  "DESCRIPCION_TIPO_PRODUCTO": "GAS",
+  "estado_servicio": "Activo",
+  "nivel_estado_servicio": "Normal",
+  "DEUDA_TOTAL_ASIGNADA": "500000",
+  "recibo": "REC-98765",
+  "valor_recibo": "150000",
+  "cuota_inicial_ofrece": "50000",
+  "cuota_mensual": "25000",
+  "INDICADOR": "NORMALIZACION",
+  "resultado_de_gestion": "Contacto exitoso",
+  "causal_de_pago": "Acuerdo de pago",
+  "causal_de_no_pago": null,
+  "tipo_de_vivienda": "Casa",
+  "uso_del_predio": "Residencial",
+  "clase_predio": "Urbano",
+  "tipo_comercio": null,
+  "tipo_habitante": "Propietario",
+  "numero_de_personas": "4",
+  "contacto": "Juan Pérez",
+  "telefono_sugerido": "3001234567",
+  "lectura": "12345",
+  "observacion": "Cliente acepta plan de pagos",
+  "ubicacion": {
+    "lat": 10.9685,
+    "lng": -74.7813
+  },
+  "fotos": ["fileId123", "fileId456"]
+}
+```
+
+## Collection Details
+
+- **Collection Name**: `records`
+- **Database**: MongoDB
+- **Primary Key**: `_id` (auto-generated)
+- **Unique Business Key**: `NUMERO_DE_LA_ORDEN`
+
+## Related Models
+
+- [Photo Model](/api/models/photo) - Photos attached to records
+- [User Model](/api/models/user) - Managers and leaders
+- [Document Model](/api/models/document) - Additional documents

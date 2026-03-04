@@ -1,0 +1,72 @@
+---
+title: 'Refresh Token'
+description: 'Refresh an existing JWT token to extend the session'
+---
+
+## POST /refresh-token
+
+Refreshes an existing JWT token (expired or not) and returns a new token with a 24-hour expiration time.
+
+### Request
+
+<ParamField body="token" type="string" required>
+  The existing JWT token (can be expired)
+</ParamField>
+
+### Response
+
+<ResponseField name="token" type="string">
+  New JWT access token valid for 24 hours
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="401 Unauthorized">
+  Returned when the token is invalid or cannot be decoded
+  ```json
+  {
+    "message": "Invalid token"
+  }
+  ```
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST https://your-domain.com/refresh-token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2NWY3YTNiMmQ4ZTRhMjAwMTJhYmNkZWYiLCJpYXQiOjE2OTg3NjU0MzJ9.K8Hn2pX9vQ7mR5nL3tY8wZ4kJ6sD1fG0hT2eU9iO7pA"
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2NWY3YTNiMmQ4ZTRhMjAwMTJhYmNkZWYiLCJpYXQiOjE2OTg4NTI4MzIsImV4cCI6MTY5ODkzOTIzMn0.N9Km3qY0wR8oS6pM4vZ9xA5lK7tE2gH1iU3fV0jP8qB"
+}
+```
+
+## Usage Notes
+
+- This endpoint accepts both expired and valid tokens
+- The new token will have a 24-hour expiration time
+- The endpoint uses `ignoreExpiration: true` when verifying the old token, allowing expired tokens to be refreshed
+- The userId from the original token is preserved in the new token
+
+## Token Refresh Strategy
+
+Recommended approach for managing token expiration:
+
+1. **Proactive Refresh**: Refresh the token before it expires (e.g., when app launches or after 23 hours)
+2. **Reactive Refresh**: If you receive a 403 error on an API call, attempt to refresh the token and retry
+3. **Re-authentication**: If refresh fails, redirect the user to the login page
+
+## Error Handling
+
+If the token cannot be refreshed:
+- The user's session is invalid
+- Clear stored credentials
+- Redirect to the login page
+- Prompt the user to re-authenticate

@@ -1,0 +1,466 @@
+---
+title: Configuration
+description: Configure Movilidad settings, environment variables, and database connections
+---
+
+## Configuration Files
+
+Movilidad uses multiple configuration approaches for different environments:
+
+<CardGroup cols={2}>
+  <Card title="settings.json" icon="file-code">
+    Meteor settings file for admin credentials and app configuration
+  </Card>
+  <Card title="Environment Variables" icon="terminal">
+    Runtime configuration for database, URLs, and ports
+  </Card>
+  <Card title=".meteor/packages" icon="box">
+    Meteor package dependencies
+  </Card>
+  <Card title="package.json" icon="npm">
+    NPM dependencies and scripts
+  </Card>
+</CardGroup>
+
+## Settings File (settings.json)
+
+The `settings.json` file configures the default admin user and application settings.
+
+### Creating settings.json
+
+Create a `settings.json` file in the project root:
+
+```json settings.json
+{
+  "private": {
+    "admin": {
+      "user": "admin",
+      "password": "admin"
+    }
+  }
+}
+```
+
+<Warning>
+The admin credentials in `settings.json` are used to create the initial admin user on first startup. **Change these defaults before deploying to production!**
+</Warning>
+
+### Settings File Structure
+
+<Tabs>
+  <Tab title="Private Settings">
+    Private settings are only available on the server:
+    
+    ```json
+    {
+      "private": {
+        "admin": {
+          "user": "your_admin_username",
+          "password": "your_secure_password"
+        },
+        "jwtSecret": "your_jwt_secret_key",
+        "apiKeys": {
+          "externalService": "key_here"
+        }
+      }
+    }
+    ```
+    
+    Access in code:
+    ```javascript
+    import settings from '../settings.json';
+    
+    Meteor.startup(() => {
+      const adminUser = settings.private.admin.user;
+      // Only available on server
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Public Settings">
+    Public settings are available on both client and server:
+    
+    ```json
+    {
+      "public": {
+        "appName": "Movilidad",
+        "features": {
+          "enableAnalytics": true,
+          "maxFileSize": 10485760
+        }
+      }
+    }
+    ```
+    
+    Access in code:
+    ```javascript
+    // Available on client and server
+    const appName = Meteor.settings.public.appName;
+    ```
+  </Tab>
+</Tabs>
+
+### Loading Settings File
+
+Load settings when starting Meteor:
+
+```bash
+# Development
+meteor run --settings settings.json
+
+# Production
+MONGO_URL=mongodb://localhost:27017/movilidad \
+ROOT_URL=https://your-domain.com \
+PORT=3000 \
+METEOR_SETTINGS=$(cat settings.json) \
+node main.js
+```
+
+## Environment Variables
+
+### Required Variables
+
+These environment variables must be set for production:
+
+<Tabs>
+  <Tab title="MONGO_URL">
+    MongoDB connection string
+    
+    ```bash
+    # Local MongoDB
+    export MONGO_URL="mongodb://localhost:27017/movilidad"
+    
+    # With authentication
+    export MONGO_URL="mongodb://username:password@localhost:27017/movilidad?authSource=admin"
+    
+    # MongoDB Atlas
+    export MONGO_URL="mongodb+srv://user:pass@cluster.mongodb.net/movilidad?retryWrites=true&w=majority"
+    
+    # Replica set
+    export MONGO_URL="mongodb://host1:27017,host2:27017,host3:27017/movilidad?replicaSet=rs0"
+    ```
+  </Tab>
+  
+  <Tab title="ROOT_URL">
+    Application URL for generating links
+    
+    ```bash
+    # Development
+    export ROOT_URL="http://localhost:3000"
+    
+    # Production
+    export ROOT_URL="https://movilidad.example.com"
+    ```
+    
+    <Info>
+    ROOT_URL is used by the photo collection to generate download links. Incorrect URL will break photo access.
+    </Info>
+  </Tab>
+  
+  <Tab title="PORT">
+    HTTP port for the application
+    
+    ```bash
+    # Default
+    export PORT=3000
+    
+    # Custom port
+    export PORT=8080
+    ```
+  </Tab>
+  
+  <Tab title="METEOR_SETTINGS">
+    JSON string of settings (alternative to --settings flag)
+    
+    ```bash
+    export METEOR_SETTINGS='{"private":{"admin":{"user":"admin","password":"secure123"}}}'
+    ```
+  </Tab>
+</Tabs>
+
+### Optional Variables
+
+```bash
+# Node environment
+export NODE_ENV=production
+
+# Mail URL for email functionality (if needed)
+export MAIL_URL="smtp://username:password@smtp.example.com:587"
+
+# Custom photo storage path
+export PHOTO_STORAGE_PATH="/data/photos"
+
+# Enable DDP rate limiting
+export DDP_DEFAULT_CONNECTION_URL=http://localhost:3000
+```
+
+## Database Configuration
+
+### MongoDB Setup
+
+Create a dedicated database for Movilidad:
+
+```bash
+# Connect to MongoDB
+mongosh
+
+# Create database and user
+use movilidad
+
+db.createUser({
+  user: "movilidad_user",
+  pwd: "secure_password",
+  roles: [
+    { role: "readWrite", db: "movilidad" }
+  ]
+})
+
+exit
+```
+
+### Database Indexes
+
+Create indexes for better performance:
+
+```javascript
+// In server startup code or MongoDB shell
+
+// Users collection
+db.users.createIndex({ "username": 1 }, { unique: true });
+db.users.createIndex({ "profile.role": 1 });
+db.users.createIndex({ "profile.project": 1 });
+
+// Records collection
+db.records.createIndex({ "NUMERO_DE_LA_ORDEN": 1 }, { unique: true });
+db.records.createIndex({ "GESTOR": 1 });
+db.records.createIndex({ "leaderId": 1 });
+db.records.createIndex({ "project": 1 });
+db.records.createIndex({ "status": 1 });
+db.records.createIndex({ "period": 1 });
+db.records.createIndex({ "updatedAt": 1 });
+
+// Compound indexes
+db.records.createIndex({ "project": 1, "GESTOR": 1 });
+db.records.createIndex({ "leaderId": 1, "status": 1 });
+
+// Documents collection
+db.documents.createIndex({ "leaderId": 1 });
+db.documents.createIndex({ "createdAt": -1 });
+
+// Photos collection
+db.photos.createIndex({ "_id": 1 });
+```
+
+<Note>
+These indexes are created automatically through normal usage, but creating them manually improves initial performance.
+</Note>
+
+## Photo Storage Configuration
+
+Configure photo storage in the photos collection:
+
+```javascript imports/api/photos/photosCollection.js
+import { FilesCollection } from 'meteor/ostrio:files';
+
+export const photosCollection = new FilesCollection({
+  collectionName: 'photos',
+  storagePath: process.env.PHOTO_STORAGE_PATH || '/data/photos',
+  
+  // File validation
+  onBeforeUpload(file) {
+    // Max 10MB
+    if (file.size > 10485760) {
+      return 'Maximum file size is 10MB';
+    }
+    
+    // Only images
+    if (!/png|jpg|jpeg/i.test(file.extension)) {
+      return 'Only PNG, JPG, JPEG formats allowed';
+    }
+    
+    return true;
+  },
+  
+  // Optional: Download route
+  downloadRoute: '/files',
+  
+  // Optional: Enable caching
+  cacheControl: 'public, max-age=31536000'
+});
+```
+
+### Storage Directory Permissions
+
+```bash
+# Create directory
+sudo mkdir -p /data/photos
+
+# Set ownership (replace 'meteorus' with your user)
+sudo chown -R meteorus:meteorus /data/photos
+
+# Set permissions
+sudo chmod 755 /data/photos
+```
+
+## Security Configuration
+
+### JWT Secret
+
+Update the JWT secret for mobile API authentication:
+
+```javascript imports/api/records/recordsEndpoints.js
+// CHANGE THIS IN PRODUCTION!
+const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
+
+// Generate a secure secret:
+// node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+```
+
+<Warning>
+**CRITICAL**: Change the default JWT_SECRET before deploying to production. Use a cryptographically secure random string.
+</Warning>
+
+### CORS Configuration
+
+If needed, configure CORS for mobile API:
+
+```javascript
+import { Picker } from 'meteor/meteorhacks:picker';
+
+// Add CORS middleware
+Picker.middleware((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200);
+    res.end();
+    return;
+  }
+  
+  next();
+});
+```
+
+## Project Configuration
+
+Movilidad supports multiple projects. Configure in user profiles:
+
+```javascript
+// Available projects
+const PROJECTS = ['movilidad', 'sierra'];
+
+// When creating users
+Accounts.createUser({
+  username: 'user1',
+  password: 'password',
+  profile: {
+    role: 'leader',
+    project: 'movilidad' // or 'sierra'
+  }
+});
+```
+
+<Info>
+Data is automatically filtered by project. Users only see records from their assigned project.
+</Info>
+
+## Production Checklist
+
+Before deploying to production:
+
+<Steps>
+  <Step title="Update Admin Credentials">
+    ```json settings.json
+    {
+      "private": {
+        "admin": {
+          "user": "your_secure_admin_username",
+          "password": "your_very_secure_password"
+        }
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Set Strong JWT Secret">
+    ```bash
+    # Generate secure secret
+    node -e "console.log(require('crypto').randomBytes(64).toString('hex'))" > jwt.secret
+    
+    # Use in environment
+    export JWT_SECRET=$(cat jwt.secret)
+    ```
+  </Step>
+  
+  <Step title="Configure Production MongoDB">
+    ```bash
+    export MONGO_URL="mongodb://user:pass@prod-server:27017/movilidad"
+    ```
+  </Step>
+  
+  <Step title="Set Correct ROOT_URL">
+    ```bash
+    export ROOT_URL="https://your-production-domain.com"
+    ```
+  </Step>
+  
+  <Step title="Enable SSL/HTTPS">
+    Use nginx or Caddy as reverse proxy with SSL certificates
+  </Step>
+  
+  <Step title="Configure Backups">
+    Set up automated backups for:
+    - MongoDB database
+    - `/data/photos` directory
+  </Step>
+</Steps>
+
+## Example Production Configuration
+
+### systemd Service File
+
+```ini /etc/systemd/system/movilidad.service
+[Unit]
+Description=Movilidad App
+After=network.target mongod.service
+
+[Service]
+Type=simple
+User=meteorus
+WorkingDirectory=/opt/movilidad/bundle
+Environment="MONGO_URL=mongodb://localhost:27017/movilidad"
+Environment="ROOT_URL=https://movilidad.example.com"
+Environment="PORT=3000"
+Environment="NODE_ENV=production"
+EnvironmentFile=/opt/movilidad/config.env
+ExecStart=/usr/bin/node main.js
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Environment File
+
+```bash /opt/movilidad/config.env
+MONGO_URL=mongodb://movilidad_user:password@localhost:27017/movilidad
+ROOT_URL=https://movilidad.example.com
+PORT=3000
+NODE_ENV=production
+JWT_SECRET=your_very_long_random_secret_here
+PHOTO_STORAGE_PATH=/data/photos
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Create First User" icon="user-plus" href="/getting-started/first-user">
+    Set up your first admin user and understand roles
+  </Card>
+  <Card title="User Guide" icon="book" href="/guide/authentication">
+    Learn how to use Movilidad features
+  </Card>
+</CardGroup>

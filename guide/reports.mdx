@@ -1,0 +1,608 @@
+---
+title: Reports
+description: Generate, view, and export comprehensive reports on field operations and collection performance
+---
+
+## Overview
+
+Movilidad provides powerful reporting capabilities for tracking field operations, manager performance, and collection metrics. Reports can be filtered by date range, manager, leader, and project.
+
+<Info>
+Reports are available to both leaders (for their team) and admins (for all teams and projects).
+</Info>
+
+## Report Types
+
+<CardGroup cols={2}>
+  <Card title="Management Report" icon="clipboard-list">
+    Detailed view of individual service orders with visit results and photos
+  </Card>
+  <Card title="Performance Summary" icon="chart-line">
+    Aggregated metrics by manager showing assignments, completions, and revenue
+  </Card>
+  <Card title="Financial Totals" icon="dollar-sign">
+    Total debt assigned and managed, broken down by product type
+  </Card>
+  <Card title="Status Distribution" icon="chart-pie">
+    Count of records by status indicator (Normalización, Contención, Castigado)
+  </Card>
+</CardGroup>
+
+## Generating Reports
+
+### Report Management Method
+
+The core reporting method provides comprehensive data:
+
+```javascript imports/api/records/recordsMethods.js
+Meteor.methods({
+  reportManagement: async function({
+    page,
+    pageSize,
+    managerId,
+    period,
+    date,
+    startDate,
+    endDate,
+    sortField,
+    sortOrder = 1,
+    leaderId,
+    assigneds
+  }) {
+    let query = {};
+
+    if (leaderId) query.leaderId = leaderId;
+    if (assigneds) query.GESTOR = { $exists: true };
+    if (managerId) query.GESTOR = managerId;
+    if (period) query.period = period;
+    
+    if (date) {
+      const normalizedDate = moment(date, 'DD/MM/YYYY')
+        .startOf('day')
+        .toDate();
+      query.updatedAt = normalizedDate;
+    }
+    
+    if (startDate && endDate) {
+      const normalizedStartDate = moment(startDate, 'DD/MM/YYYY')
+        .startOf('day')
+        .toDate();
+      const normalizedEndDate = moment(endDate, 'DD/MM/YYYY')
+        .endOf('day')
+        .toDate();
+      query.updatedAt = {
+        $gte: normalizedStartDate,
+        $lte: normalizedEndDate
+      };
+    }
+
+    // Get paginated records
+    const pages = await recordsCollection
+      .rawCollection()
+      .aggregate([
+        { $match: query },
+        { $sort: { [sortField]: sortOrder } },
+        {
+          $facet: {
+            metadata: [{ $count: 'totalCount' }],
+            data: [
+              { $skip: (page - 1) * pageSize },
+              { $limit: pageSize }
+            ]
+          }
+        },
+        {
+          $project: {
+            data: 1,
+            totalCount: { $arrayElemAt: ['$metadata.totalCount', 0] }
+          }
+        }
+      ])
+      .toArray();
+
+    // Calculate totals
+    const totales = /* aggregation for totals */;
+    
+    // Calculate performance by manager
+    const report = /* aggregation for manager stats */;
+
+    return { ...pages, totales, report };
+  }
+});
+```
+
+### Report Parameters
+
+<Tabs>
+  <Tab title="Pagination">
+    ```javascript
+    {
+      page: 1,           // Current page number
+      pageSize: 50       // Records per page
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Filters">
+    ```javascript
+    {
+      managerId: 'userId',    // Filter by specific manager
+      leaderId: 'userId',     // Filter by leader
+      assigneds: true,        // Only assigned records
+      period: ISODateString,  // Assignment period
+      date: 'DD/MM/YYYY',     // Specific management date
+      startDate: 'DD/MM/YYYY', // Date range start
+      endDate: 'DD/MM/YYYY'    // Date range end
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Sorting">
+    ```javascript
+    {
+      sortField: 'CONTRATO', // Field to sort by
+      sortOrder: 1           // 1 = ascending, -1 = descending
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Report Components
+
+### Main Report View
+
+The admin/leader report interface:
+
+```javascript imports/ui/components/reportView/index.jsx
+export default function AdminView() {
+  const [leaders, setLeaders] = useState([]);
+  const [selectedLeader, setSelectedLeader] = useState();
+  const [managers, setManagers] = useState([]);
+  const [selectedManager, setSelectedManager] = useState(null);
+  const [period, setPeriod] = useState(null);
+  const [date, setDate] = useState(null);
+  const [startDate, setStartDate] = useState(null);
+  const [endDate, setEndDate] = useState(null);
+  const [report, setReport] = useState();
+  const [totales, setTotales] = useState();
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 5,
+    total: 0
+  });
+
+  function fetchReport(page, pageSize) {
+    Meteor.call('reportManagement', {
+      page,
+      pageSize,
+      managerId: selectedManager,
+      period: period ? moment(period).toISOString() : null,
+      date,
+      startDate,
+      endDate,
+      leaderId: selectedLeader
+    }, (error, result) => {
+      if (!error) {
+        setDataSource(result[0].data);
+        setReport(result.report[0]);
+        setTotales(result.totales[0]);
+        setPagination(prev => ({
+          ...prev,
+          current: page,
+          total: result[0].totalCount
+        }));
+      }
+    });
+  }
+  
+  // ... rest of component
+}
+```
+
+### Filter Controls
+
+<Steps>
+  <Step title="Leader Selection (Admin Only)">
+    ```javascript
+    <Select
+      placeholder="Lider"
+      style={{ width: 200 }}
+      onChange={manageLeaderChange}
+      allowClear
+    >
+      {leaders.map(leader => (
+        <Select.Option key={leader.id} value={leader.id}>
+          {leader.username}
+        </Select.Option>
+      ))}
+    </Select>
+    ```
+  </Step>
+  
+  <Step title="Manager Selection">
+    ```javascript
+    <Select
+      placeholder="Gestor"
+      style={{ width: 200 }}
+      onChange={value => setSelectedManager(value)}
+      allowClear
+    >
+      {managers.map(manager => (
+        <Select.Option key={manager.id} value={manager.id}>
+          {manager.username}
+        </Select.Option>
+      ))}
+    </Select>
+    ```
+  </Step>
+  
+  <Step title="Assignment Period">
+    ```javascript
+    <DatePicker
+      onChange={date => setPeriod(date)}
+      format="DD/MM/YYYY"
+      placeholder="Periodo asignado"
+    />
+    ```
+  </Step>
+  
+  <Step title="Visit Date">
+    ```javascript
+    <DatePicker
+      onChange={(_, dateString) => setDate(dateString)}
+      format="DD/MM/YYYY"
+      placeholder="Fecha de gestion"
+    />
+    ```
+  </Step>
+  
+  <Step title="Date Range">
+    ```javascript
+    <DatePicker.RangePicker
+      onChange={(_, dateStrings) => {
+        setStartDate(dateStrings[0]);
+        setEndDate(dateStrings[1]);
+      }}
+      format="DD/MM/YYYY"
+      placeholder={['Inicio', 'Final']}
+    />
+    ```
+  </Step>
+</Steps>
+
+## Financial Totals
+
+The totals aggregation provides financial summary:
+
+```javascript
+const totales = await recordsCollection
+  .rawCollection()
+  .aggregate([
+    { $match: query },
+    {
+      $facet: {
+        metadata: [
+          {
+            $group: {
+              _id: null,
+              deudaTotalAsignada: {
+                $sum: { $toDouble: '$DEUDA_TOTAL_ASIGNADA' }
+              },
+              indicadorCounts: {
+                $push: { $toUpper: '$INDICADOR' }
+              },
+              descripcionTipoProductoCounts: {
+                $push: { $toUpper: '$DESCRIPCION_TIPO_PRODUCTO' }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      $project: {
+        deudaTotalAsignada: {
+          $ifNull: [
+            { $arrayElemAt: ['$metadata.deudaTotalAsignada', 0] },
+            0
+          ]
+        },
+        indicadorCounts: {
+          Normalizacion: { /* count logic */ },
+          Contencion: { /* count logic */ },
+          Castigado: { /* count logic */ }
+        },
+        descripcionTipoProductoCounts: {
+          GAS: { /* count logic */ },
+          BRILLA: { /* count logic */ },
+          SERVICIOS_FINANCIEROS: { /* count logic */ }
+        }
+      }
+    }
+  ])
+  .toArray();
+```
+
+### Totals Display Component
+
+```javascript imports/ui/components/records/totals.jsx
+import { Card, Statistic, Row, Col } from 'antd';
+
+export default function Totals({ totales }) {
+  if (!totales) return null;
+  
+  return (
+    <Row gutter={16}>
+      <Col span={6}>
+        <Card>
+          <Statistic 
+            title="Total Debt Assigned"
+            value={totales.deudaTotalAsignada}
+            precision={2}
+            prefix="$"
+          />
+        </Card>
+      </Col>
+      <Col span={6}>
+        <Card>
+          <Statistic
+            title="Normalización"
+            value={totales.indicadorCounts?.Normalizacion || 0}
+          />
+        </Card>
+      </Col>
+      <Col span={6}>
+        <Card>
+          <Statistic
+            title="Gas Products"
+            value={totales.descripcionTipoProductoCounts?.GAS || 0}
+          />
+        </Card>
+      </Col>
+      {/* More statistics */}
+    </Row>
+  );
+}
+```
+
+## Manager Performance Report
+
+Performance metrics aggregated by manager:
+
+```javascript
+const report = await recordsCollection
+  .rawCollection()
+  .aggregate([
+    { $match: query },
+    {
+      $group: {
+        _id: '$GESTOR',
+        asignadas: { $sum: 1 },
+        totalDeudaCorrienteAsignada: {
+          $sum: { $toDouble: '$DEUDA_TOTAL_ASIGNADA' }
+        },
+        gestionadas: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'reviewed'] }, 1, 0]
+          }
+        },
+        totalDeudaCorrienteGestionada: {
+          $sum: {
+            $cond: [
+              { $eq: ['$status', 'reviewed'] },
+              { $toDouble: '$DEUDA_TOTAL_ASIGNADA' },
+              0
+            ]
+          }
+        },
+        pendientes: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'pending'] }, 1, 0]
+          }
+        }
+      }
+    },
+    {
+      $group: {
+        _id: null,
+        totalAsignadas: { $sum: '$asignadas' },
+        totalDeudaCorrienteAsignada: { $sum: '$totalDeudaCorrienteAsignada' },
+        totalGestionadas: { $sum: '$gestionadas' },
+        totalDeudaCorrienteGestionada: { $sum: '$totalDeudaCorrienteGestionada' },
+        totalPendientes: { $sum: '$pendientes' },
+        gestores: {
+          $push: {
+            gestor: '$_id',
+            asignadas: '$asignadas',
+            totalDeudaCorrienteAsignada: '$totalDeudaCorrienteAsignada',
+            gestionadas: '$gestionadas',
+            totalDeudaCorrienteGestionada: '$totalDeudaCorrienteGestionada',
+            pendientes: '$pendientes'
+          }
+        }
+      }
+    }
+  ])
+  .toArray();
+```
+
+### Report Table
+
+```javascript imports/ui/components/records/reportTable.jsx
+import { Table } from 'antd';
+
+export default function ReportTable({ report, managers }) {
+  const columns = [
+    {
+      title: 'Manager',
+      dataIndex: 'gestor',
+      render: (gestorId) => {
+        const manager = managers.find(m => m.id === gestorId);
+        return manager?.username || gestorId;
+      }
+    },
+    {
+      title: 'Assigned',
+      dataIndex: 'asignadas'
+    },
+    {
+      title: 'Completed',
+      dataIndex: 'gestionadas'
+    },
+    {
+      title: 'Pending',
+      dataIndex: 'pendientes'
+    },
+    {
+      title: 'Debt Assigned',
+      dataIndex: 'totalDeudaCorrienteAsignada',
+      render: (value) => `$${value.toLocaleString()}`
+    },
+    {
+      title: 'Debt Managed',
+      dataIndex: 'totalDeudaCorrienteGestionada',
+      render: (value) => `$${value.toLocaleString()}`
+    }
+  ];
+  
+  return (
+    <Table
+      columns={columns}
+      dataSource={report?.gestores || []}
+      rowKey="gestor"
+      summary={() => (
+        <Table.Summary.Row>
+          <Table.Summary.Cell>Total</Table.Summary.Cell>
+          <Table.Summary.Cell>{report?.totalAsignadas}</Table.Summary.Cell>
+          <Table.Summary.Cell>{report?.totalGestionadas}</Table.Summary.Cell>
+          <Table.Summary.Cell>{report?.totalPendientes}</Table.Summary.Cell>
+          <Table.Summary.Cell>
+            ${report?.totalDeudaCorrienteAsignada.toLocaleString()}
+          </Table.Summary.Cell>
+          <Table.Summary.Cell>
+            ${report?.totalDeudaCorrienteGestionada.toLocaleString()}
+          </Table.Summary.Cell>
+        </Table.Summary.Row>
+      )}
+    />
+  );
+}
+```
+
+## Excel Export
+
+Export reports to Excel format:
+
+```javascript
+import XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
+
+async function handleExport() {
+  const pageSize = 100;
+  let page = 1;
+  const allData = [];
+  let total = 10000000;
+  
+  try {
+    // Fetch all pages
+    while (total / pageSize >= page) {
+      const partData = await Meteor.callAsync('reportManagement', {
+        page,
+        pageSize,
+        managerId: selectedManager,
+        leaderId: Meteor.userId(),
+        period: period ? moment(period).toISOString() : null,
+        date,
+        startDate,
+        endDate,
+        sortField: 'CONTRATO'
+      });
+      
+      if (partData[0].totalCount) total = partData[0].totalCount;
+      
+      allData.push(partData[0].data);
+      setDownloadReport({ 
+        percent: page / (total / pageSize), 
+        loading: true 
+      });
+      page++;
+    }
+    
+    // Create worksheet
+    const ws = XLSX.utils.json_to_sheet(allData.flat());
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Report');
+    
+    // Download file
+    XLSX.writeFile(wb, `Reporte_${Date.now()}.xlsx`);
+  } catch (error) {
+    message.error(error.message);
+  } finally {
+    setDownloadReport({ percent: 0, loading: false });
+  }
+}
+```
+
+<Note>
+Large exports are fetched in batches to avoid memory issues. A progress indicator shows download status.
+</Note>
+
+## Report Access Control
+
+<Tabs>
+  <Tab title="Leaders">
+    Leaders can only view reports for:
+    - Their own project
+    - Their assigned managers
+    - Records they uploaded
+    
+    ```javascript
+    const query = {
+      leaderId: this.userId,
+      // ... other filters
+    };
+    ```
+  </Tab>
+  
+  <Tab title="Admins">
+    Admins can view reports for:
+    - All projects
+    - All leaders and managers
+    - All records
+    
+    ```javascript
+    const query = {
+      leaderId: selectedLeader || undefined,
+      // ... other filters
+    };
+    ```
+  </Tab>
+</Tabs>
+
+## Key Metrics
+
+<CardGroup cols={2}>
+  <Card title="Completion Rate" icon="percent">
+    `(gestionadas / asignadas) * 100`
+  </Card>
+  <Card title="Collection Efficiency" icon="chart-line">
+    `totalDeudaCorrienteGestionada / totalDeudaCorrienteAsignada`
+  </Card>
+  <Card title="Average per Manager" icon="user">
+    `totalAsignadas / number of managers`
+  </Card>
+  <Card title="Pending Workload" icon="clock">
+    `totalPendientes / number of managers`
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="User Roles" icon="users" href="/guide/user-roles">
+    Understand role-based report access
+  </Card>
+  <Card title="Mobile App" icon="mobile" href="/mobile/overview">
+    Learn how field data is collected
+  </Card>
+</CardGroup>

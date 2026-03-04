@@ -1,0 +1,577 @@
+---
+title: Photo Management
+description: Learn how field workers upload and manage photos as evidence of field visits
+---
+
+## Overview
+
+Movilidad allows field managers (gestores) to upload photos as evidence of their field visits. Photos are uploaded from the mobile app and associated with service orders.
+
+<Info>
+Each service order can have up to 2 photos. Photos are stored on the server filesystem and referenced in the database.
+</Info>
+
+## Photo Collection
+
+Photos are managed using the `ostrio:files` package:
+
+```javascript imports/api/photos/photosCollection.js
+import { FilesCollection } from 'meteor/ostrio:files';
+
+function checkSize(size) {
+  return size <= 10485760; // 10MB max
+}
+
+function checkFormat(regex_formats, file) {
+  return regex_formats.test(file.extension);
+}
+
+function checkFile(size, regex_formats, file) {
+  if (!checkSize(size)) {
+    return 'El tamaño máximo del archivo es de 10Mb';
+  }
+  if (!checkFormat(regex_formats, file)) {
+    return 'Formato no válido, solo se aceptan imagenes';
+  }
+  return true;
+}
+
+export const photosCollection = new FilesCollection({
+  collectionName: 'photos',
+  storagePath: '/data/photos',
+  onBeforeUpload(file) {
+    return checkFile(10485760, /png|jpg|jpeg/i, file);
+  }
+});
+```
+
+### Validation Rules
+
+<CardGroup cols={3}>
+  <Card title="File Size" icon="file-arrow-down">
+    Maximum 10MB per photo
+  </Card>
+  <Card title="File Format" icon="image">
+    PNG, JPG, JPEG only
+  </Card>
+  <Card title="Quantity" icon="hashtag">
+    Up to 2 photos per visit
+  </Card>
+</CardGroup>
+
+## Uploading Photos (Mobile App)
+
+Field workers upload photos via the mobile API after completing a field visit.
+
+### Upload Endpoint
+
+```javascript imports/api/records/recordsEndpoints.js
+import { Picker } from 'meteor/meteorhacks:picker';
+import { Random } from 'meteor/random';
+import multer from 'multer';
+import { photosCollection } from '../photos/photosCollection';
+import { recordsCollection } from './recordsCollection';
+
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
+postRoutes.route('/management/photos/:orden', function(params, req, res) {
+  const { orden } = params;
+  
+  authenticate(req, res, () => {
+    upload.fields([
+      { name: 'foto1', maxCount: 1 },
+      { name: 'foto2', maxCount: 1 }
+    ])(req, res, async function(err) {
+      if (err) {
+        res.writeHead(400, { 'Content-Type': 'text/plain' });
+        res.end('Error uploading files');
+        return;
+      }
+
+      // Get uploaded files
+      const foto1 = req.files['foto1'] ? req.files['foto1'][0] : null;
+      const foto2 = req.files['foto2'] ? req.files['foto2'][0] : null;
+
+      // Save photos to collection
+      const fotos = [foto1, foto2].map(photo => {
+        if (!photo) return null;
+        
+        const fileId = Random.secret(10);
+
+        photosCollection.write(photo.buffer, {
+          fileName: photo.originalname,
+          type: photo.mimetype,
+          fileId
+        });
+
+        return fileId;
+      });
+
+      // Update record with photo IDs
+      recordsCollection.update(
+        { NUMERO_DE_LA_ORDEN: orden },
+        { $set: { fotos } },
+        { upsert: true }
+      );
+
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('Record added successfully');
+    });
+  });
+});
+```
+
+### Upload Request Format
+
+<Tabs>
+  <Tab title="HTTP Request">
+    ```bash
+    POST /management/photos/ORDER-12345
+    Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+    Content-Type: multipart/form-data
+    
+    # Form fields:
+    foto1: [binary image data]
+    foto2: [binary image data]
+    ```
+  </Tab>
+  
+  <Tab title="cURL Example">
+    ```bash
+    curl -X POST \
+      -H "Authorization: Bearer YOUR_TOKEN" \
+      -F "foto1=@/path/to/photo1.jpg" \
+      -F "foto2=@/path/to/photo2.jpg" \
+      http://your-server.com/management/photos/ORDER-12345
+    ```
+  </Tab>
+  
+  <Tab title="JavaScript (Fetch)">
+    ```javascript
+    const formData = new FormData();
+    formData.append('foto1', photo1File);
+    formData.append('foto2', photo2File);
+    
+    fetch(`${API_URL}/management/photos/${orderNumber}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      body: formData
+    })
+    .then(response => response.text())
+    .then(result => console.log(result));
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+Photos must be uploaded AFTER the visit data is submitted. The order number must already exist in the records collection.
+</Warning>
+
+## Retrieving Photos
+
+Photos are retrieved using Meteor methods:
+
+### Get File by ID
+
+```javascript imports/api/photos/photosMethods.js
+import { Meteor } from 'meteor/meteor';
+import { photosCollection } from './photosCollection';
+
+function replaceBaseUrl(link) {
+  return link.replace('http://localhost/', process.env.ROOT_URL);
+}
+
+Meteor.methods({
+  async getFileById(id) {
+    return await photosCollection.find({ _id: id });
+  },
+  
+  async getFileLink(id) {
+    return photosCollection
+      .find({})
+      .fetch()
+      .map(function(fileRef) {
+        return {
+          link: replaceBaseUrl(photosCollection.link(fileRef)),
+          id: fileRef._id
+        };
+      })
+      .filter(dataLink => dataLink.id == id);
+  }
+});
+```
+
+### Getting Photo Links in Reports
+
+When generating reports, photo links are resolved:
+
+```javascript imports/ui/components/reportView/index.jsx
+const updatedResult = await result[0].data.map(async (record) => {
+  const { ubicacion, period, fotos, ...update } = record;
+  
+  // Get photo links
+  const photoPromises = fotos
+    ? fotos.map(photoId => Meteor.callAsync('getFileLink', photoId))
+    : null;
+  
+  const FOTOS = photoPromises
+    ? await Promise.all(photoPromises)
+        .then(photos => photos.flat(1).map(p => p.link))
+        .catch(() => 'Error')
+    : [];
+
+  return {
+    ...update,
+    FOTOS,
+    // ... other fields
+  };
+});
+```
+
+## Photo Storage
+
+### Storage Location
+
+Photos are stored on the filesystem:
+
+```
+/data/photos/
+├── abc123xyz.jpg
+├── def456uvw.png
+├── ghi789rst.jpeg
+└── ...
+```
+
+<Steps>
+  <Step title="Create Storage Directory">
+    ```bash
+    sudo mkdir -p /data/photos
+    sudo chown meteorus:meteorus /data/photos
+    sudo chmod 755 /data/photos
+    ```
+  </Step>
+  
+  <Step title="Configure Collection">
+    Storage path is set in photosCollection:
+    
+    ```javascript
+    storagePath: '/data/photos'
+    ```
+  </Step>
+  
+  <Step title="Set Permissions">
+    Ensure the application user has write access:
+    
+    ```bash
+    ls -la /data/photos
+    # Should show: drwxr-xr-x meteorus meteorus
+    ```
+  </Step>
+</Steps>
+
+### Database References
+
+Photo metadata is stored in MongoDB:
+
+```javascript
+// photos collection document
+{
+  _id: 'abc123xyz',
+  name: 'photo.jpg',
+  path: '/data/photos/abc123xyz.jpg',
+  type: 'image/jpeg',
+  size: 2458123,
+  ext: 'jpg',
+  userId: 'managerId',
+  meta: {},
+  isVideo: false,
+  isAudio: false,
+  isImage: true,
+  isPDF: false,
+  isText: false,
+  isJSON: false,
+  versions: {
+    original: {
+      path: '/data/photos/abc123xyz.jpg',
+      size: 2458123,
+      type: 'image/jpeg',
+      extension: 'jpg'
+    }
+  },
+  _downloadRoute: '/cdn/storage',
+  _collectionName: 'photos',
+  public: true
+}
+```
+
+## Photo Workflow
+
+<Steps>
+  <Step title="Field Visit">
+    Manager visits service location and completes inspection
+  </Step>
+  
+  <Step title="Capture Photos">
+    Mobile app captures 1-2 photos as evidence:
+    - Meter reading
+    - Service condition
+    - Customer contact proof
+    - Property status
+  </Step>
+  
+  <Step title="Submit Visit Data">
+    ```bash
+    POST /management
+    Body: {
+      NUMERO_DE_LA_ORDEN: 'ORDER-12345',
+      fecha_gestion: '04/03/2024',
+      resultado_de_gestion: 'Visitado',
+      status: 'reviewed'
+    }
+    ```
+  </Step>
+  
+  <Step title="Upload Photos">
+    ```bash
+    POST /management/photos/ORDER-12345
+    Files: foto1, foto2
+    ```
+  </Step>
+  
+  <Step title="Record Updated">
+    Record is updated with photo IDs:
+    
+    ```javascript
+    {
+      NUMERO_DE_LA_ORDEN: 'ORDER-12345',
+      fotos: ['photoId1', 'photoId2'],
+      status: 'reviewed'
+    }
+    ```
+  </Step>
+  
+  <Step title="Photos Viewable in Reports">
+    Leaders and admins can view photos in the report interface
+  </Step>
+</Steps>
+
+## Viewing Photos (Web Dashboard)
+
+Photos are displayed in the reports table:
+
+```javascript
+// Column definition
+{
+  title: 'Fotos',
+  dataIndex: 'FOTOS',
+  render: (fotos) => {
+    if (!fotos || fotos.length === 0) {
+      return <Text type="secondary">Sin fotos</Text>;
+    }
+    
+    return (
+      <Space>
+        {fotos.map((link, index) => (
+          <a 
+            key={index} 
+            href={link} 
+            target="_blank" 
+            rel="noopener noreferrer"
+          >
+            <Image 
+              src={link} 
+              alt={`Foto ${index + 1}`}
+              width={50}
+              height={50}
+              style={{ objectFit: 'cover' }}
+            />
+          </a>
+        ))}
+      </Space>
+    );
+  }
+}
+```
+
+## Photo Security
+
+### Access Control
+
+Photos require authentication:
+
+```javascript
+function authenticate(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    res.writeHead(401);
+    res.end('Unauthorized: No token provided');
+    return;
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) {
+      res.writeHead(403);
+      res.end(JSON.stringify({ message: 'Invalid token' }));
+      return;
+    }
+
+    const user = Meteor.users.findOne(decoded.userId);
+    if (!user || user.profile.role !== 'management') {
+      res.writeHead(403);
+      res.end(JSON.stringify({ message: 'Access denied' }));
+      return;
+    }
+
+    next();
+  });
+}
+```
+
+<Info>
+Only authenticated users with the 'management' role can upload photos via the API.
+</Info>
+
+### File Validation
+
+Photos are validated before upload:
+
+1. **Size check**: Maximum 10MB
+2. **Format check**: Only PNG, JPG, JPEG
+3. **Extension verification**: Regex test on file extension
+
+```javascript
+function checkFile(size, regex_formats, file) {
+  if (!checkSize(size)) {
+    return 'El tamaño máximo del archivo es de 10Mb';
+  }
+  if (!checkFormat(regex_formats, file)) {
+    return 'Formato no válido, solo se aceptan imagenes';
+  }
+  return true;
+}
+```
+
+## Storage Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Regular Backups" icon="hard-drive">
+    Backup `/data/photos` directory regularly along with database
+  </Card>
+  
+  <Card title="Disk Space Monitoring" icon="gauge">
+    Monitor available disk space as photos accumulate
+  </Card>
+  
+  <Card title="Photo Compression" icon="file-zipper">
+    Consider implementing client-side compression before upload
+  </Card>
+  
+  <Card title="CDN Integration" icon="cloud">
+    For high-traffic deployments, serve photos via CDN
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<Accordion title="Photo upload fails with 400 error">
+  Check:
+  1. File size is under 10MB
+  2. File format is PNG, JPG, or JPEG
+  3. Authorization token is valid
+  4. Order number exists in database
+  5. `/data/photos` directory has write permissions
+</Accordion>
+
+<Accordion title="Photos not visible in reports">
+  Verify:
+  1. Photo IDs are stored in record's `fotos` array
+  2. Photos exist in `/data/photos` directory
+  3. `ROOT_URL` environment variable is set correctly
+  4. Photo links are being resolved properly
+  5. Browser can access photo URLs
+</Accordion>
+
+<Accordion title="Permission denied when saving photos">
+  Fix permissions:
+  
+  ```bash
+  sudo chown -R meteorus:meteorus /data/photos
+  sudo chmod -R 755 /data/photos
+  ```
+</Accordion>
+
+<Accordion title="Photos taking too long to load">
+  Consider:
+  1. Implementing photo thumbnails
+  2. Using lazy loading in UI
+  3. Compressing images on upload
+  4. Serving via CDN or reverse proxy cache
+</Accordion>
+
+## Migration to Cloud Storage
+
+For production deployments, consider migrating to cloud storage:
+
+### AWS S3 Example
+
+```javascript
+import AWS from 'aws-sdk';
+
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWS_ACCESS_KEY,
+  secretAccessKey: process.env.AWS_SECRET_KEY
+});
+
+export const photosCollection = new FilesCollection({
+  collectionName: 'photos',
+  
+  // Custom upload handler
+  onAfterUpload(fileRef) {
+    const params = {
+      Bucket: 'movilidad-photos',
+      Key: fileRef._id,
+      Body: fs.createReadStream(fileRef.path),
+      ContentType: fileRef.type
+    };
+    
+    s3.upload(params, (err, data) => {
+      if (err) {
+        console.error('S3 upload error:', err);
+      } else {
+        // Update file reference with S3 URL
+        photosCollection.update(fileRef._id, {
+          $set: { 'meta.s3Url': data.Location }
+        });
+        
+        // Optionally delete local file
+        fs.unlink(fileRef.path, () => {});
+      }
+    });
+  }
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Mobile App Usage" icon="mobile" href="/mobile/usage">
+    Learn how to capture and upload photos from the mobile app
+  </Card>
+  
+  <Card title="Reports" icon="chart-bar" href="/guide/reports">
+    View photos in generated reports
+  </Card>
+  
+  <Card title="Document Management" icon="file" href="/guide/document-management">
+    Manage other types of documents
+  </Card>
+  
+  <Card title="Architecture" icon="sitemap" href="/architecture">
+    Understand the photo storage architecture
+  </Card>
+</CardGroup>

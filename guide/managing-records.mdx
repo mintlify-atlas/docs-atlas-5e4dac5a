@@ -1,0 +1,589 @@
+---
+title: Managing Records
+description: Learn how to upload, search, filter, assign, and manage utility service records in Movilidad
+---
+
+## Overview
+
+Records are the core data entities in Movilidad, representing utility service orders that need field management. Leaders upload records via Excel, assign them to field managers (gestores), and track their progress.
+
+## Record Structure
+
+Each record contains comprehensive utility service information:
+
+<Tabs>
+  <Tab title="Customer Information">
+    - `NOMBRE_CLIENTE`: Customer name
+    - `IDENTIFICACION`: Customer ID number
+    - `DIRECCION_PREDIO`: Service address
+    - `DESCRIPCION_BARRIO`: Neighborhood
+    - `DESCRIPCION_CICLO`: Billing cycle
+  </Tab>
+  
+  <Tab title="Service Details">
+    - `NUMERO_DE_LA_ORDEN`: Order number (unique)
+    - `CONTRATO`: Contract number
+    - `PRODUCTO`: Product ID
+    - `DESCRIPCION_TIPO_PRODUCTO`: Product type (Gas, Brilla, etc.)
+    - `DESCRIPCION_CATEGORIA`: Service category
+    - `DESCRIPCION_SUBCATEGORIA`: Subcategory/stratum
+    - `ELEMENTO_MEDICION`: Meter number
+    - `ULTIMA_LECTURA_TOMADA`: Last meter reading
+  </Tab>
+  
+  <Tab title="Financial Data">
+    - `DEUDA_TOTAL_ASIGNADA`: Total assigned debt
+    - `TOTAL_DEUDA_CORRIENTE`: Current debt total
+    - `CORRIENTE_VENCIDA_ASIGNADA`: Overdue current debt
+    - `DIAS_DEUDA_ASIGNACION`: Days in debt at assignment
+    - `EDAD_MORA_ACTUAL`: Current delinquency age
+    - `ESTADO_FINANCIERO`: Financial state
+    - `INDICADOR`: Status indicator (Normalización, Contención, Castigado)
+  </Tab>
+  
+  <Tab title="Assignment Data">
+    - `GESTOR`: Assigned manager ID
+    - `leaderId`: Leader who owns the record
+    - `project`: Project name (movilidad/sierra)
+    - `period`: Assignment period
+    - `fecha_asignacion`: Assignment date
+    - `status`: Record status (pending/reviewed)
+  </Tab>
+  
+  <Tab title="Field Visit Data">
+    - `fecha_gestion`: Visit date
+    - `resultado_de_gestion`: Visit result
+    - `causal_de_pago`: Payment reason
+    - `causal_de_no_pago`: Non-payment reason
+    - `estado_servicio`: Service status
+    - `observacion`: Observations
+    - `ubicacion`: {latitud, longitud}
+    - `fotos`: Array of photo IDs
+    - `updatedAt`: Last update timestamp
+  </Tab>
+</Tabs>
+
+## Uploading Records (Leaders)
+
+Leaders upload service records via Excel files.
+
+### Excel Import Process
+
+<Steps>
+  <Step title="Prepare Excel File">
+    Ensure your Excel file contains all required columns:
+    
+    - NUMERO_DE_LA_ORDEN (required, unique)
+    - CONTRATO
+    - PRODUCTO
+    - NOMBRE_CLIENTE
+    - DIRECCION_PREDIO
+    - DEUDA_TOTAL_ASIGNADA
+    - ... other fields
+    
+    <Info>
+    The exact column names must match the expected field names.
+    </Info>
+  </Step>
+  
+  <Step title="Navigate to Upload Section">
+    As a leader, click **"Cargar"** (Upload) in the sidebar menu
+  </Step>
+  
+  <Step title="Select Excel File">
+    Click the upload button and select your `.xlsx` or `.xls` file
+  </Step>
+  
+  <Step title="Review Preview">
+    The system displays a preview table of records to be imported
+  </Step>
+  
+  <Step title="Confirm Import">
+    Click the confirm button to import all records
+    
+    Records are created with:
+    - Auto-generated `_id`
+    - Associated with your `leaderId`
+    - Tagged with your `project`
+    - Set to `period` based on import date
+  </Step>
+</Steps>
+
+### Create Record Method
+
+Records are created using the `createRecord` method:
+
+```javascript imports/api/records/recordsMethods.js
+import { Random } from 'meteor/random';
+import { recordsCollection } from './recordsCollection';
+
+Meteor.methods({
+  async createRecord(record, leaderId) {
+    const _id = Random.id(10);
+    
+    // Remove duplicates by order number
+    recordsCollection.remove({
+      NUMERO_DE_LA_ORDEN: record.NUMERO_DE_LA_ORDEN
+    });
+
+    return recordsCollection.insert({ 
+      ...record, 
+      leaderId, 
+      _id 
+    });
+  }
+});
+```
+
+<Warning>
+Duplicate order numbers are automatically removed and replaced with the new data.
+</Warning>
+
+## Viewing and Searching Records
+
+### Records Table
+
+Leaders view their records in a comprehensive table:
+
+```javascript imports/ui/components/records/index.jsx
+const fetchRecords = (page, pageSize, search, sort) => {
+  Meteor.call(
+    'getRecords',
+    page,
+    pageSize,
+    { ...search, leaderId: Meteor.userId() },
+    sort,
+    (err, resp) => {
+      if (!err) {
+        setDataSource(resp.data);
+        setPagination(prev => ({
+          ...prev,
+          current: page,
+          total: resp.total
+        }));
+      }
+    }
+  );
+};
+```
+
+### Search Capabilities
+
+The records table provides powerful search features:
+
+<CardGroup cols={2}>
+  <Card title="Text Search" icon="magnifying-glass">
+    Search any column with real-time filtering and highlighting
+  </Card>
+  <Card title="Manager Filter" icon="user-tag">
+    Filter by assigned manager or show unassigned records
+  </Card>
+  <Card title="Date Filter" icon="calendar">
+    Filter records by assignment period
+  </Card>
+  <Card title="Column Sorting" icon="arrow-up-arrow-down">
+    Sort ascending or descending on any column
+  </Card>
+</CardGroup>
+
+### Text Search Implementation
+
+```javascript
+const handleSearch = (selectedKeys, confirm, dataIndex, sort) => {
+  confirm();
+  setSearchText(selectedKeys[0]);
+  setSearchedColumn(dataIndex);
+
+  const searchTerm = selectedKeys[0];
+  const search = { ...searchKeys, [dataIndex]: searchTerm };
+  setSearchKeys(search);
+  
+  fetchRecords(1, pagination.pageSize, search, sort);
+};
+```
+
+Search supports:
+
+- **Case-insensitive matching**
+- **Partial text matching**
+- **Highlighted results** using `react-highlight-words`
+- **Multiple simultaneous filters**
+
+### Column Search Props
+
+```javascript
+const getColumnSearchProps = (dataIndex) => ({
+  filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
+    <div style={{ padding: 8 }}>
+      <Input
+        ref={searchInput}
+        placeholder={`Buscar en: ${dataIndex}`}
+        value={selectedKeys[0]}
+        onChange={e => setSelectedKeys(e.target.value ? [e.target.value] : [])}
+        onPressEnter={() => handleSearch(selectedKeys, confirm, dataIndex)}
+      />
+      <Space>
+        <Button
+          type="primary"
+          onClick={() => handleSearch(selectedKeys, confirm, dataIndex)}
+          icon={<SearchOutlined />}
+        >
+          Buscar
+        </Button>
+        <Button onClick={() => handleReset(clearFilters, dataIndex, confirm)}>
+          Reset
+        </Button>
+      </Space>
+    </div>
+  ),
+  filterIcon: filtered => (
+    <SearchOutlined style={{ color: filtered ? '#1677ff' : undefined }} />
+  )
+});
+```
+
+## Assigning Records to Managers
+
+Leaders assign service orders to their field managers.
+
+### Individual Assignment
+
+Assign a single record via dropdown:
+
+```javascript
+const handleManagerChange = (recordId, managerId) => {
+  Meteor.call('updateRecordManager', recordId, managerId, (error) => {
+    if (error) {
+      message.error('Error asignando gestor');
+    } else {
+      fetchRecords(pagination.current, pagination.pageSize, searchKeys);
+    }
+  });
+};
+```
+
+Each record row has a manager dropdown:
+
+```javascript
+<Select
+  value={record.GESTOR}
+  onChange={value => handleManagerChangeAlert(value, record)}
+  style={{ width: 150 }}
+>
+  {managers.map(manager => (
+    <Select.Option key={manager.id} value={manager._id}>
+      {manager.username}
+    </Select.Option>
+  ))}
+</Select>
+```
+
+### Bulk Assignment
+
+Assign multiple records simultaneously:
+
+<Steps>
+  <Step title="Select Records">
+    Use table row selection to choose multiple records
+  </Step>
+  
+  <Step title="Choose Manager">
+    Select a manager from the bulk assignment dropdown
+  </Step>
+  
+  <Step title="Set Service Type (optional)">
+    For sierra project, specify service type:
+    - Cartera (Collections)
+    - Suspensión Sencilla (Simple Suspension)
+    - Suspensión Drástica (Drastic Suspension)
+    - Reconexiones (Reconnections)
+  </Step>
+  
+  <Step title="Confirm Assignment">
+    Click "Asignar gestores" button to assign all selected records
+  </Step>
+</Steps>
+
+```javascript
+const handleBatchAssign = () => {
+  if (!selectedManager) {
+    message.error('Seleccione un gestor antes de asignar.');
+    return;
+  }
+  
+  const updates = selectedRowKeys.map(recordId =>
+    new Promise((resolve, reject) => {
+      Meteor.call(
+        'updateRecordManager',
+        recordId,
+        selectedManager,
+        Meteor.userId(),
+        selectedService,
+        error => error ? reject(error) : resolve()
+      );
+    })
+  );
+  
+  Promise.all(updates)
+    .then(() => {
+      message.success('Gestores asignados con éxito.');
+      fetchRecords(pagination.current, pagination.pageSize, searchKeys);
+      setSelectedRowKeys([]);
+    })
+    .catch(error => {
+      message.error('Error al asignar el gestor.');
+    });
+};
+```
+
+### Update Record Manager Method
+
+```javascript imports/api/records/recordsMethods.js
+import moment from 'moment';
+
+Meteor.methods({
+  async updateRecordManager(recordId, managerId, leaderId, tipo_producto) {
+    const product = {};
+    if (tipo_producto) {
+      product.DESCRIPCION_TIPO_PRODUCTO = tipo_producto;
+    }
+
+    return await recordsCollection.updateAsync(
+      { NUMERO_DE_LA_ORDEN: recordId, leaderId },
+      {
+        $set: {
+          ...product,
+          GESTOR: managerId,
+          status: 'pending',
+          updatedAt: '',
+          fecha_gestion: '',
+          fecha_asignacion: moment().format('DD/MM/YYYY')
+        }
+      },
+      { upsert: true }
+    );
+  }
+});
+```
+
+<Info>
+When a record is assigned:
+- `GESTOR` field is set to manager's user ID
+- `status` is set to 'pending'
+- `fecha_asignacion` is set to current date
+- Previous visit data is cleared
+</Info>
+
+## Record Status Lifecycle
+
+<Steps>
+  <Step title="Created">
+    Record uploaded via Excel, no manager assigned
+    
+    ```javascript
+    {
+      NUMERO_DE_LA_ORDEN: '12345',
+      GESTOR: null,
+      status: undefined
+    }
+    ```
+  </Step>
+  
+  <Step title="Assigned (Pending)">
+    Manager assigned by leader
+    
+    ```javascript
+    {
+      GESTOR: 'managerId',
+      status: 'pending',
+      fecha_asignacion: '04/03/2024'
+    }
+    ```
+  </Step>
+  
+  <Step title="In Progress">
+    Manager views record in mobile app
+  </Step>
+  
+  <Step title="Completed (Reviewed)">
+    Manager submits field visit results
+    
+    ```javascript
+    {
+      status: 'reviewed',
+      fecha_gestion: '05/03/2024',
+      resultado_de_gestion: 'Contacto exitoso',
+      ubicacion: { latitud: 10.123, longitud: -75.456 },
+      fotos: ['photoId1', 'photoId2'],
+      updatedAt: Date
+    }
+    ```
+  </Step>
+  
+  <Step title="Reassigned">
+    Leader can reassign to different manager
+    
+    Status returns to 'pending', visit data is cleared
+  </Step>
+</Steps>
+
+## Pagination
+
+Records are paginated for performance:
+
+```javascript
+const handleTableChange = (pagination) => {
+  fetchRecords(pagination.current, pagination.pageSize, searchKeys);
+  setPagination(pagination);
+};
+```
+
+The `getRecords` method uses MongoDB aggregation for efficient pagination:
+
+```javascript
+Meteor.methods({
+  async getRecords(page, pageSize, filters, sort) {
+    page = parseInt(page, 10) || 1;
+    pageSize = parseInt(pageSize, 10) || 50;
+    const project = Meteor.users.findOne(this.userId).profile.project;
+
+    let filter = { project };
+    // Add search filters...
+
+    const records = await recordsCollection
+      .rawCollection()
+      .aggregate([
+        { $match: filter },
+        { $sort: { [sortField]: sortOrder } },
+        {
+          $facet: {
+            metadata: [{ $count: 'totalCount' }],
+            data: [
+              { $skip: (page - 1) * pageSize },
+              { $limit: pageSize }
+            ]
+          }
+        },
+        {
+          $project: {
+            data: 1,
+            totalCount: { $arrayElemAt: ['$metadata.totalCount', 0] }
+          }
+        }
+      ])
+      .toArray();
+
+    return {
+      data: records[0].data,
+      total: records[0].totalCount
+    };
+  }
+});
+```
+
+<Note>
+The `$facet` stage allows getting both paginated data and total count in a single query.
+</Note>
+
+## Number Formatting
+
+Financial fields are automatically formatted:
+
+```javascript imports/ui/utils/formatIfNumber.js
+export default function formatIfNumber(value) {
+  // Check if value is a number
+  const num = Number(value);
+  
+  if (!isNaN(num) && value !== '' && value !== null) {
+    return new Intl.NumberFormat('es-CO', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    }).format(num);
+  }
+  
+  return value;
+}
+```
+
+Usage in table columns:
+
+```javascript
+render: (text) => formatIfNumber(text)
+```
+
+Excludes non-financial fields:
+
+```javascript
+const excludedFields = ['NUMERO_DE_LA_ORDEN', 'CONTRATO', 'PRODUCTO'];
+
+render: (text, record) => 
+  excludedFields.includes(dataIndex) 
+    ? text 
+    : formatIfNumber(text)
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Data Validation" icon="check-circle">
+    Validate Excel data before import to ensure required fields are present
+  </Card>
+  
+  <Card title="Manager Load Balance" icon="scale-balanced">
+    Distribute records evenly across managers to balance workload
+  </Card>
+  
+  <Card title="Regular Updates" icon="rotate">
+    Upload updated records periodically to keep data current
+  </Card>
+  
+  <Card title="Status Monitoring" icon="chart-line">
+    Track pending vs reviewed records to measure progress
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<Accordion title="Excel import fails">
+  Check:
+  1. File is valid `.xlsx` or `.xls` format
+  2. Column names exactly match expected fields
+  3. NUMERO_DE_LA_ORDEN column exists and contains unique values
+  4. File size is reasonable (< 50MB)
+</Accordion>
+
+<Accordion title="Cannot assign manager to record">
+  Verify:
+  1. You are logged in as a leader
+  2. The manager is assigned to you (check via Gestores menu)
+  3. Both you and the manager are in the same project
+  4. The record belongs to your project
+</Accordion>
+
+<Accordion title="Search returns no results">
+  Try:
+  1. Clear all filters and search again
+  2. Check for typos in search term
+  3. Verify the field contains the expected data
+  4. Reset pagination to page 1
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Photo Management" icon="camera" href="/guide/photo-management">
+    Learn how field workers upload photos
+  </Card>
+  
+  <Card title="Reports" icon="chart-bar" href="/guide/reports">
+    Generate reports on record status and manager performance
+  </Card>
+  
+  <Card title="Mobile App Usage" icon="mobile" href="/mobile/usage">
+    Learn how managers use the mobile app
+  </Card>
+  
+  <Card title="Document Management" icon="file" href="/guide/document-management">
+    Manage additional documents
+  </Card>
+</CardGroup>

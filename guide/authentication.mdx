@@ -1,0 +1,586 @@
+---
+title: Authentication
+description: Learn about user authentication, login flows, and security in Movilidad
+---
+
+## Authentication Overview
+
+Movilidad implements two authentication systems:
+
+<CardGroup cols={2}>
+  <Card title="Web Authentication" icon="desktop">
+    Meteor Accounts system with session-based authentication for the web dashboard
+  </Card>
+  <Card title="Mobile Authentication" icon="mobile">
+    JWT (JSON Web Token) authentication via REST API for the mobile app
+  </Card>
+</CardGroup>
+
+## Web Application Login
+
+The web application uses Meteor's built-in accounts system with password authentication.
+
+### Login Page
+
+The login interface is built with Ant Design components:
+
+```javascript imports/ui/login.jsx
+import React, { useContext } from 'react';
+import { Button, Flex, Form, Input, Typography } from 'antd';
+import { LockOutlined, UserOutlined } from '@ant-design/icons';
+import { NotificationContext } from './contexts/notificationContext';
+
+export default function Login() {
+  const { alertMessage } = useContext(NotificationContext);
+
+  const onFinish = ({ username, password }) => {
+    Meteor.loginWithPassword(username, password, (resp) => {
+      if (resp?.error) {
+        alertMessage({
+          type: 'error',
+          message: 'Ha ocurrido un error',
+          description: resp.reason,
+          placement: 'top'
+        });
+      }
+    });
+  };
+
+  return (
+    <Form onFinish={onFinish} requiredMark={false}>
+      <Form.Item
+        name="username"
+        rules={[{ required: true, message: 'Introduce tu usuario' }]}
+      >
+        <Input 
+          prefix={<UserOutlined />} 
+          placeholder="Ingrese su usuario" 
+        />
+      </Form.Item>
+      
+      <Form.Item
+        name="password"
+        rules={[{ required: true, message: 'Introduce tu contraseña' }]}
+      >
+        <Input.Password
+          prefix={<LockOutlined />}
+          placeholder="Ingrese su contraseña"
+        />
+      </Form.Item>
+      
+      <Form.Item>
+        <Button block type="primary" htmlType="submit">
+          Entrar
+        </Button>
+      </Form.Item>
+    </Form>
+  );
+}
+```
+
+### Login Flow
+
+<Steps>
+  <Step title="User Enters Credentials">
+    User provides username and password on the login page
+  </Step>
+  
+  <Step title="Client Validates Input">
+    Form validation ensures both fields are filled
+  </Step>
+  
+  <Step title="Authentication Request">
+    `Meteor.loginWithPassword()` sends credentials to server via secure DDP connection
+  </Step>
+  
+  <Step title="Server Verification">
+    Server checks credentials against database using bcrypt password hashing
+  </Step>
+  
+  <Step title="Session Creation">
+    On success, server creates session and returns authentication token
+  </Step>
+  
+  <Step title="Redirect to Dashboard">
+    `SecurityProvider` detects authenticated user and renders main application
+  </Step>
+</Steps>
+
+### Security Provider
+
+The `SecurityProvider` component manages authentication state:
+
+```javascript imports/ui/contexts/securityProvider.jsx
+import { useLoggedUser } from 'meteor/quave:logged-user-react';
+
+export default function SecurityProvider({ publicPage, children }) {
+  const { loggedUser, isLoadingLoggedUser } = useLoggedUser();
+  
+  if (isLoadingLoggedUser) {
+    return <div>Loading...</div>;
+  }
+  
+  if (!loggedUser) {
+    return publicPage; // Shows Login component
+  }
+  
+  return children; // Shows Main application
+}
+```
+
+<Info>
+The `quave:logged-user-react` package provides reactive user state tracking.
+</Info>
+
+## Session Management
+
+### Active Session
+
+Once logged in, the user's session persists:
+
+```javascript
+// Access current user anywhere in the app
+const user = Meteor.user();
+console.log(user.username);
+console.log(user.profile.role);
+console.log(user.profile.project);
+
+// Check if user is logged in
+const userId = Meteor.userId();
+if (userId) {
+  // User is authenticated
+}
+```
+
+### Using the Role Hook
+
+The custom `useRole` hook provides reactive access to user role:
+
+```javascript imports/ui/hooks/useRole.jsx
+import React from 'react';
+import { useTracker } from 'meteor/react-meteor-data';
+
+const useRole = () => {
+  const { userRole, isLoading } = useTracker(() => {
+    const user = Meteor.user();
+    return {
+      userRole: user?.profile?.role,
+      isLoading: !user
+    };
+  }, []);
+
+  return { userRole, isLoading };
+};
+
+export default useRole;
+```
+
+Usage in components:
+
+```javascript
+import useRole from './hooks/useRole';
+
+function MyComponent() {
+  const { userRole, isLoading } = useRole();
+  
+  if (isLoading) return <Spinner />;
+  
+  if (userRole === 'admin') {
+    return <AdminPanel />;
+  }
+  
+  if (userRole === 'leader') {
+    return <LeaderDashboard />;
+  }
+  
+  return <AccessDenied />;
+}
+```
+
+### Logout
+
+Users can logout from the sidebar menu:
+
+```javascript imports/ui/main.jsx
+{
+  key: '1',
+  icon: <LogoutOutlined />,
+  label: 'Cerrar sesión',
+  onClick: () => Meteor.logout()
+}
+```
+
+Logout flow:
+
+<Steps>
+  <Step title="User Clicks Logout">
+    Logout menu item triggers `Meteor.logout()`
+  </Step>
+  
+  <Step title="Session Terminated">
+    Server invalidates the session token
+  </Step>
+  
+  <Step title="Redirect to Login">
+    `SecurityProvider` detects no user and shows login page
+  </Step>
+</Steps>
+
+## Mobile API Authentication
+
+The mobile app uses JWT (JSON Web Token) authentication for stateless API access.
+
+### Login Endpoint
+
+Mobile apps authenticate via REST API:
+
+```javascript imports/api/records/recordsEndpoints.js
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = 'your_jwt_secret_key';
+
+postRoutes.route('/login', function(params, req, res) {
+  const { username, password } = req.body;
+  
+  try {
+    // Find user
+    const user = Meteor.users.findOne({ username });
+    if (!user) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ message: 'Invalid username or password' }));
+      return;
+    }
+
+    // Verify password
+    const result = Accounts._checkPassword(user, password);
+    if (result.error) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ message: 'Invalid username or password' }));
+      return;
+    }
+
+    // Generate JWT token
+    const token = jwt.sign({ userId: user._id }, JWT_SECRET);
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ token }));
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ message: 'Invalid data' }));
+  }
+});
+```
+
+### Mobile Login Flow
+
+<Tabs>
+  <Tab title="Request">
+    ```bash
+    POST http://your-server.com/login
+    Content-Type: application/json
+    
+    {
+      "username": "manager1",
+      "password": "password123"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Success Response">
+    ```json
+    {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhYmMxMjMiLCJpYXQiOjE2MjM4NTY3ODl9.xyz789abc"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Error Response">
+    ```json
+    {
+      "message": "Invalid username or password"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Token Usage
+
+Mobile app includes token in subsequent requests:
+
+```bash
+GET http://your-server.com/management/manager1
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+### Token Refresh
+
+Tokens can be refreshed before expiration:
+
+```javascript
+postRoutes.route('/refresh-token', function(params, req, res) {
+  const { token } = req.body;
+
+  try {
+    // Decode token
+    const decoded = jwt.decode(token, { complete: true });
+    if (!decoded) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ message: 'Invalid token' }));
+      return;
+    }
+
+    // Generate new token
+    const newToken = jwt.sign(
+      { userId: decoded.payload.userId }, 
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.writeHead(200);
+    res.end(JSON.stringify({ token: newToken }));
+  } catch (e) {
+    res.writeHead(401);
+    res.end(JSON.stringify({ message: 'Invalid token' }));
+  }
+});
+```
+
+<Tabs>
+  <Tab title="Request">
+    ```bash
+    POST http://your-server.com/refresh-token
+    Content-Type: application/json
+    
+    {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Response">
+    ```json
+    {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.NEW_TOKEN..."
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Authentication Middleware
+
+Protected endpoints use authentication middleware:
+
+```javascript
+function authenticate(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    res.writeHead(401);
+    res.end('Unauthorized: No token provided');
+    return;
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) {
+      res.writeHead(403);
+      res.end(JSON.stringify({ message: 'Invalid token' }));
+      return;
+    }
+
+    // Verify user exists and has correct role
+    const user = Meteor.users.findOne(decoded.userId);
+    if (!user || user.profile.role !== 'management') {
+      res.writeHead(403);
+      res.end(JSON.stringify({ message: 'Access denied' }));
+      return;
+    }
+
+    next();
+  });
+}
+
+// Use in routes
+postRoutes.route('/management', function(params, req, res) {
+  authenticate(req, res, () => {
+    // Protected route logic
+  });
+});
+```
+
+## Role-Based Access Control
+
+Access to features is controlled by user roles:
+
+### Menu Rendering
+
+Different menus are shown based on role:
+
+```javascript imports/ui/utils/roleMenues.js
+export default function getMenu(role, setView) {
+  const roles = {
+    admin: [
+      {
+        key: '10',
+        icon: <UserAddOutlined />,
+        label: 'Crear usuario',
+        onClick: () => setView(<NewUser />)
+      },
+      {
+        key: '11',
+        icon: <UsergroupAddOutlined />,
+        label: 'Gestores',
+        onClick: () => setView(<AssignManagers />)
+      },
+      {
+        key: '12',
+        icon: <SnippetsOutlined />,
+        label: 'Asignaciones',
+        onClick: () => setView(<GetReport admin />)
+      }
+    ],
+    
+    leader: [
+      {
+        key: '10',
+        icon: <CloudUploadOutlined />,
+        label: 'Cargar',
+        onClick: () => setView(<AnalizeExcel />)
+      },
+      {
+        key: '11',
+        icon: <UserOutlined />,
+        label: 'Asignar gestores',
+        onClick: () => setView(<Records />)
+      },
+      {
+        key: '12',
+        icon: <SnippetsOutlined />,
+        label: 'Reportes',
+        onClick: () => setView(<GetReport />)
+      }
+    ],
+    
+    management: [
+      {
+        key: '13',
+        icon: <SnippetsOutlined />,
+        label: 'Aplicativo',
+        onClick: () => download('/movilidapp.apk')
+      }
+    ]
+  };
+
+  return roles[role];
+}
+```
+
+### Method-Level Authorization
+
+Server methods verify user permissions:
+
+```javascript
+Meteor.methods({
+  getLeaders(userId) {
+    const user = Meteor.users.findOne(userId);
+    
+    // Only admins can get leader list
+    if (!user || user.profile.role !== 'admin') {
+      throw new Meteor.Error(
+        'Unauthorized',
+        'Only admins can access this resource'
+      );
+    }
+    
+    return Meteor.users.find({ 'profile.role': 'leader' }).fetch();
+  },
+  
+  getRecords(page, pageSize, filters, sort) {
+    // Automatically filter by user's project
+    const project = Meteor.users.findOne(this.userId).profile.project;
+    const filter = { project, ...filters };
+    
+    // Return only records from user's project
+    return recordsCollection.find(filter).fetch();
+  }
+});
+```
+
+## Security Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Strong Passwords" icon="key">
+    Enforce minimum password requirements and use bcrypt hashing (built into Meteor Accounts)
+  </Card>
+  
+  <Card title="HTTPS Only" icon="lock">
+    Always use HTTPS in production to encrypt credentials in transit
+  </Card>
+  
+  <Card title="Token Expiration" icon="clock">
+    Set appropriate JWT expiration times (24 hours recommended)
+  </Card>
+  
+  <Card title="Secret Rotation" icon="rotate">
+    Regularly rotate JWT_SECRET and invalidate old tokens
+  </Card>
+  
+  <Card title="Rate Limiting" icon="gauge">
+    Implement rate limiting on login endpoints to prevent brute force
+  </Card>
+  
+  <Card title="Input Validation" icon="shield-check">
+    Always validate and sanitize user inputs using `check` package
+  </Card>
+</CardGroup>
+
+<Warning>
+**CRITICAL**: Change the default JWT_SECRET before deploying to production. Use a cryptographically secure random string at least 64 characters long.
+</Warning>
+
+## Troubleshooting
+
+<Accordion title="Login fails with correct credentials">
+  Check:
+  1. MongoDB is running and accessible
+  2. User exists in database: `Meteor.users.findOne({ username: 'user' })`
+  3. Network connection is stable
+  4. Browser console for error messages
+</Accordion>
+
+<Accordion title="Mobile app returns 401 Unauthorized">
+  Verify:
+  1. Token is included in Authorization header
+  2. Token format is: `Bearer <token>`
+  3. Token hasn't expired
+  4. User has 'management' role
+  5. JWT_SECRET matches between login and verification
+</Accordion>
+
+<Accordion title="Session doesn't persist after refresh">
+  Check:
+  1. Cookies are enabled in browser
+  2. No localStorage/cookie blocking extensions
+  3. HTTPS is configured correctly
+  4. DDP connection is maintained
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Managing Records" icon="table" href="/guide/managing-records">
+    Learn how to work with service orders
+  </Card>
+  
+  <Card title="User Roles" icon="users" href="/guide/user-roles">
+    Deep dive into permissions and access control
+  </Card>
+  
+  <Card title="Mobile App" icon="mobile" href="/mobile/overview">
+    Set up and use the mobile application
+  </Card>
+  
+  <Card title="Reports" icon="chart-line" href="/guide/reports">
+    Generate and export reports
+  </Card>
+</CardGroup>

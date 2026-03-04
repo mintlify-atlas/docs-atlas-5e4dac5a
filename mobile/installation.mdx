@@ -1,0 +1,396 @@
+---
+title: Mobile App Installation
+description: Step-by-step guide to installing the Movilidad Android app on your device
+---
+
+## Prerequisites
+
+Before installing the Movilidad mobile app, ensure you have:
+
+<CardGroup cols={2}>
+  <Card title="Android Device" icon="mobile">
+    Android 6.0 (Marshmallow) or higher
+  </Card>
+  
+  <Card title="User Account" icon="user">
+    Active account with 'management' role
+  </Card>
+  
+  <Card title="Internet Connection" icon="wifi">
+    For downloading APK and initial sync
+  </Card>
+  
+  <Card title="Storage Space" icon="hard-drive">
+    At least 50MB free space
+  </Card>
+</CardGroup>
+
+## Installation Methods
+
+### Method 1: Download from Web Dashboard (Recommended)
+
+<Steps>
+  <Step title="Login to Web Dashboard">
+    Open your browser and navigate to the Movilidad web application:
+    
+    ```
+    https://your-movilidad-server.com
+    ```
+    
+    Login with your manager credentials.
+  </Step>
+  
+  <Step title="Access Aplicativo Menu">
+    After logging in, click on **"Aplicativo"** in the sidebar menu.
+    
+    This will initiate the download of `movilidapp.apk`.
+  </Step>
+  
+  <Step title="Enable Unknown Sources">
+    Before installing, you need to allow installation from unknown sources:
+    
+    **Android 8.0 and higher:**
+    - Settings → Apps & notifications → Advanced → Special app access → Install unknown apps
+    - Select your browser (e.g., Chrome)
+    - Enable "Allow from this source"
+    
+    **Android 7.1 and lower:**
+    - Settings → Security
+    - Enable "Unknown sources"
+  </Step>
+  
+  <Step title="Install the APK">
+    - Open the downloaded `movilidapp.apk` file from your Downloads folder
+    - Tap "Install"
+    - Wait for installation to complete
+    - Tap "Open" to launch the app
+  </Step>
+</Steps>
+
+### Method 2: Direct Download
+
+If you can't access the web dashboard:
+
+<Steps>
+  <Step title="Get APK URL">
+    Contact your system administrator for the direct APK download link:
+    
+    ```
+    https://your-server.com/movilidapp.apk
+    ```
+  </Step>
+  
+  <Step title="Download APK">
+    Open the URL in your mobile browser to download the APK file.
+  </Step>
+  
+  <Step title="Enable Unknown Sources">
+    Follow the same steps as Method 1, Step 3.
+  </Step>
+  
+  <Step title="Install">
+    Open the downloaded APK and install.
+  </Step>
+</Steps>
+
+## First Launch Setup
+
+After installing the app:
+
+<Steps>
+  <Step title="Open Movilidad App">
+    Find the Movilidad icon in your app drawer and tap to open.
+  </Step>
+  
+  <Step title="Configure Server URL (If Required)">
+    If prompted, enter your Movilidad server URL:
+    
+    ```
+    https://your-movilidad-server.com
+    ```
+    
+    <Note>
+    Most builds have the server URL pre-configured. Only custom builds require this step.
+    </Note>
+  </Step>
+  
+  <Step title="Grant Permissions">
+    The app will request several permissions:
+    
+    - **Camera**: For taking photos during visits
+    - **Location**: For recording GPS coordinates
+    - **Storage**: For saving photos and data
+    
+    Tap **"Allow"** for each permission.
+    
+    <Warning>
+    The app requires these permissions to function properly. Denying permissions will limit functionality.
+    </Warning>
+  </Step>
+  
+  <Step title="Login">
+    Enter your credentials:
+    
+    - **Username**: Your manager username
+    - **Password**: Your password
+    
+    Tap **"Login"** or **"Entrar"**
+  </Step>
+  
+  <Step title="Initial Sync">
+    After successful login, the app will:
+    
+    - Fetch your assigned service orders
+    - Download necessary data
+    - Prepare for offline use
+    
+    Wait for sync to complete (may take a few minutes).
+  </Step>
+</Steps>
+
+## Verifying Installation
+
+Check that the app is installed correctly:
+
+<Accordion title="Check App Info">
+  1. Go to Settings → Apps → Movilidad
+  2. Verify app is installed
+  3. Check permissions are granted:
+     - Camera: Allowed
+     - Location: Allowed
+     - Storage: Allowed
+</Accordion>
+
+<Accordion title="Test Login">
+  1. Open the app
+  2. Enter your credentials
+  3. Verify you can see the login screen
+  4. Attempt to login
+  5. Check for assigned orders after login
+</Accordion>
+
+<Accordion title="Test Camera">
+  1. Navigate to a service order
+  2. Tap the camera button
+  3. Verify camera opens
+  4. Take a test photo
+  5. Verify photo is saved
+</Accordion>
+
+<Accordion title="Test GPS">
+  1. Ensure location services are enabled
+  2. Open a service order
+  3. Check that GPS coordinates are captured
+  4. Verify latitude/longitude are displayed
+</Accordion>
+
+## Troubleshooting Installation
+
+### Common Installation Issues
+
+<Accordion title="APK won't install - 'App not installed'">
+  **Causes:**
+  - Insufficient storage space
+  - Previous version conflict
+  - Corrupted APK file
+  
+  **Solutions:**
+  1. Free up storage space (need at least 50MB)
+  2. Uninstall any previous version:
+     - Settings → Apps → Movilidad → Uninstall
+  3. Re-download the APK file
+  4. Clear browser cache and download again
+</Accordion>
+
+<Accordion title="'Unknown sources' option not found">
+  **For Android 8.0+:**
+  
+  The setting moved to per-app basis:
+  
+  1. Try to install the APK
+  2. When blocked, tap "Settings"
+  3. Enable "Allow from this source"
+  4. Go back and install again
+</Accordion>
+
+<Accordion title="App crashes on launch">
+  **Solutions:**
+  
+  1. Force stop the app:
+     - Settings → Apps → Movilidad → Force Stop
+  2. Clear app data:
+     - Settings → Apps → Movilidad → Storage → Clear Data
+  3. Reinstall the app
+  4. Check Android version (must be 6.0+)
+  5. Verify device has sufficient RAM (2GB+ recommended)
+</Accordion>
+
+<Accordion title="Permissions not requested">
+  **Manual permission grant:**
+  
+  1. Go to Settings → Apps → Movilidad → Permissions
+  2. Manually enable:
+     - Camera: ON
+     - Location: ON
+     - Storage: ON
+  3. Restart the app
+</Accordion>
+
+<Accordion title="Cannot login - 'Invalid credentials'">
+  **Check:**
+  
+  1. Username is correct (case-sensitive)
+  2. Password is correct
+  3. Account has 'management' role
+  4. Account is active (not disabled)
+  5. Device has internet connection
+  6. Server URL is correct (if configurable)
+  
+  **Test credentials:**
+  
+  Try logging into the web dashboard with same credentials to verify they work.
+</Accordion>
+
+<Accordion title="No assigned orders appear">
+  **Possible causes:**
+  
+  1. No orders assigned by leader yet
+  2. Network connection issue
+  3. Sync not completed
+  
+  **Solutions:**
+  
+  1. Pull to refresh on orders list
+  2. Check internet connection
+  3. Logout and login again
+  4. Contact your leader to verify assignments
+</Accordion>
+
+## Updating the App
+
+When a new version is available:
+
+<Steps>
+  <Step title="Download New Version">
+    Download the latest APK using the same method as installation.
+  </Step>
+  
+  <Step title="Install Over Existing">
+    Install the new APK directly - it will update the existing app.
+    
+    <Info>
+    Your login credentials and data will be preserved during update.
+    </Info>
+  </Step>
+  
+  <Step title="Verify Update">
+    Check app version in Settings or About screen.
+  </Step>
+</Steps>
+
+<Warning>
+**Important**: Always backup your data before updating. While data should be preserved, sync all pending submissions before updating.
+</Warning>
+
+## Uninstalling the App
+
+If you need to remove the app:
+
+<Steps>
+  <Step title="Sync Pending Data">
+    Before uninstalling, ensure all pending submissions are synced:
+    
+    1. Open the app
+    2. Connect to internet
+    3. Wait for all data to upload
+    4. Verify all orders show as "synced"
+  </Step>
+  
+  <Step title="Uninstall">
+    **Method 1: Via Settings**
+    - Settings → Apps → Movilidad → Uninstall
+    
+    **Method 2: Via App Drawer**
+    - Long press Movilidad icon
+    - Drag to "Uninstall" or tap uninstall option
+  </Step>
+  
+  <Step title="Clear Remaining Data">
+    If needed, manually delete:
+    - Cached photos in storage
+    - Downloaded APK file
+  </Step>
+</Steps>
+
+## System Requirements
+
+### Minimum Requirements
+
+- **OS**: Android 6.0 (Marshmallow)
+- **RAM**: 1GB (2GB recommended)
+- **Storage**: 50MB free space
+- **Camera**: Any rear camera
+- **GPS**: Built-in GPS or network location
+
+### Recommended Specifications
+
+- **OS**: Android 8.0 (Oreo) or higher
+- **RAM**: 2GB or more
+- **Storage**: 200MB free space (for photos)
+- **Camera**: 5MP or higher
+- **Screen**: 5" or larger display
+- **Battery**: 3000mAh or larger (for field use)
+
+### Tested Devices
+
+The app has been tested on:
+
+- Samsung Galaxy J7
+- Motorola Moto G series
+- Xiaomi Redmi Note series
+- Huawei Y series
+- Generic Android devices with Android 6.0+
+
+<Note>
+While the app should work on any Android 6.0+ device, performance may vary on older or low-end devices.
+</Note>
+
+## Security Considerations
+
+<CardGroup cols={2}>
+  <Card title="APK Source" icon="shield-check">
+    Only download from official sources provided by your organization
+  </Card>
+  
+  <Card title="Permissions" icon="lock">
+    Only grant permissions when prompted by the official app
+  </Card>
+  
+  <Card title="Credentials" icon="key">
+    Never share your login credentials with others
+  </Card>
+  
+  <Card title="Device Security" icon="mobile-screen">
+    Use device lock screen to protect app access
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Usage Guide" icon="book" href="/mobile/usage">
+    Learn how to use the mobile app for field work
+  </Card>
+  
+  <Card title="Photo Management" icon="camera" href="/guide/photo-management">
+    Understand photo requirements and best practices
+  </Card>
+  
+  <Card title="Troubleshooting" icon="wrench" href="/mobile/usage#troubleshooting">
+    Resolve common usage issues
+  </Card>
+  
+  <Card title="Authentication" icon="key" href="/guide/authentication">
+    Learn about mobile authentication
+  </Card>
+</CardGroup>

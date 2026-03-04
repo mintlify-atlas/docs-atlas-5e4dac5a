@@ -1,0 +1,442 @@
+---
+title: Mobile App Overview
+description: Introduction to the Movilidad Android mobile application for field workers
+---
+
+## Introduction
+
+The Movilidad mobile app is an Android application designed for field managers (gestores) to complete utility service visits, record results, and upload evidence from the field.
+
+<Info>
+The mobile app is currently available for Android only. The APK file can be downloaded directly from the web dashboard.
+</Info>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Offline Capable" icon="wifi-slash">
+    Work without internet connection and sync when online
+  </Card>
+  
+  <Card title="View Assignments" icon="clipboard-list">
+    See all service orders assigned to you by your leader
+  </Card>
+  
+  <Card title="Record Results" icon="pen-to-square">
+    Submit visit outcomes with detailed form data
+  </Card>
+  
+  <Card title="Photo Upload" icon="camera">
+    Capture and upload up to 2 photos as evidence per visit
+  </Card>
+  
+  <Card title="Geolocation" icon="location-dot">
+    Automatically record GPS coordinates of field visits
+  </Card>
+  
+  <Card title="Secure Access" icon="lock">
+    JWT-based authentication for secure data access
+  </Card>
+</CardGroup>
+
+## Mobile Architecture
+
+The mobile app communicates with the Movilidad server via REST API:
+
+```
+[Mobile App] ←→ HTTPS/REST API ←→ [Meteor Server]
+     │                                      │
+     │                                      │
+  [Local DB]                            [MongoDB]
+```
+
+### Communication Flow
+
+<Steps>
+  <Step title="Authentication">
+    Manager logs in with username and password
+    
+    ```bash
+    POST /login
+    { "username": "manager1", "password": "pass" }
+    
+    Response: { "token": "eyJhbG..." }
+    ```
+  </Step>
+  
+  <Step title="Fetch Assignments">
+    App retrieves assigned service orders
+    
+    ```bash
+    GET /management/manager1
+    Authorization: Bearer eyJhbG...
+    
+    Response: Array of service orders
+    ```
+  </Step>
+  
+  <Step title="Field Work">
+    Manager visits location, completes inspection, fills out form
+  </Step>
+  
+  <Step title="Submit Data">
+    Submit visit results to server
+    
+    ```bash
+    POST /management
+    Authorization: Bearer eyJhbG...
+    Body: { visit data }
+    ```
+  </Step>
+  
+  <Step title="Upload Photos">
+    Upload photos taken during visit
+    
+    ```bash
+    POST /management/photos/ORDER-123
+    Authorization: Bearer eyJhbG...
+    Files: foto1, foto2
+    ```
+  </Step>
+</Steps>
+
+## API Endpoints
+
+The mobile app uses the following REST endpoints:
+
+### Authentication Endpoints
+
+<Tabs>
+  <Tab title="Login">
+    ```bash
+    POST /login
+    Content-Type: application/json
+    
+    Request Body:
+    {
+      "username": "manager1",
+      "password": "securepassword"
+    }
+    
+    Success Response (200):
+    {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+    
+    Error Response (401):
+    {
+      "message": "Invalid username or password"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Refresh Token">
+    ```bash
+    POST /refresh-token
+    Content-Type: application/json
+    
+    Request Body:
+    {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+    
+    Success Response (200):
+    {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+    ```
+    
+    Tokens expire after 24 hours and can be refreshed.
+  </Tab>
+</Tabs>
+
+### Data Endpoints
+
+<Tabs>
+  <Tab title="Get Assigned Records">
+    ```bash
+    GET /management/:username
+    Authorization: Bearer <token>
+    
+    Example:
+    GET /management/manager1
+    Authorization: Bearer eyJhbG...
+    
+    Response (200):
+    [
+      {
+        "NUMERO_DE_LA_ORDEN": "12345",
+        "NOMBRE_CLIENTE": "John Doe",
+        "DIRECCION_PREDIO": "Calle 123",
+        "DEUDA_TOTAL_ASIGNADA": "150000",
+        "status": "pending",
+        // ... more fields
+      },
+      // ... more records
+    ]
+    ```
+  </Tab>
+  
+  <Tab title="Submit Visit Data">
+    ```bash
+    POST /management
+    Authorization: Bearer <token>
+    Content-Type: application/json
+    
+    Request Body:
+    {
+      "NUMERO_DE_LA_ORDEN": "12345",
+      "fecha_gestion": "04/03/2024",
+      "numero_producto": "PROD-123",
+      "resultado_de_gestion": "Contacto exitoso",
+      "causal_de_pago": "Acuerdo de pago",
+      "estado_servicio": "Activo",
+      "observacion": "Cliente aceptó plan de pagos",
+      "ubicacion": {
+        "latitud": 10.123456,
+        "longitud": -75.123456
+      },
+      "status": "reviewed"
+    }
+    
+    Response (200):
+    "Record added successfully"
+    ```
+  </Tab>
+  
+  <Tab title="Upload Photos">
+    ```bash
+    POST /management/photos/:orden
+    Authorization: Bearer <token>
+    Content-Type: multipart/form-data
+    
+    Example:
+    POST /management/photos/12345
+    
+    Form Data:
+    - foto1: [binary image data]
+    - foto2: [binary image data]
+    
+    Response (200):
+    "Record added successfully"
+    ```
+  </Tab>
+</Tabs>
+
+## Data Fields
+
+When submitting visit data, the mobile app collects:
+
+<Tabs>
+  <Tab title="Required Fields">
+    - `NUMERO_DE_LA_ORDEN`: Order number (identifies the record)
+    - `fecha_gestion`: Visit date (DD/MM/YYYY format)
+    - `status`: Must be set to "reviewed" when completing
+  </Tab>
+  
+  <Tab title="Visit Results">
+    - `resultado_de_gestion`: Visit outcome
+    - `causal_de_pago`: Payment reason (if applicable)
+    - `causal_de_no_pago`: Non-payment reason
+    - `estado_servicio`: Service status
+  </Tab>
+  
+  <Tab title="Location Data">
+    - `ubicacion.latitud`: GPS latitude
+    - `ubicacion.longitud`: GPS longitude
+    
+    Automatically captured from device GPS.
+  </Tab>
+  
+  <Tab title="Property Info">
+    - `tipo_de_vivienda`: Housing type
+    - `uso_del_predio`: Property use
+    - `tipo_habitante`: Resident type
+    - `clase_predio`: Property class
+    - `tipo_comercio`: Commerce type (if commercial)
+  </Tab>
+  
+  <Tab title="Additional Data">
+    - `contacto`: Contact person
+    - `telefono_sugerido`: Suggested phone number
+    - `observacion`: Observations/notes
+    - `recibo`: Receipt number
+    - `valor_recibo`: Receipt value
+    - `lectura`: Meter reading
+  </Tab>
+</Tabs>
+
+## Security
+
+### JWT Authentication
+
+The mobile app uses JSON Web Tokens for authentication:
+
+```javascript
+const JWT_SECRET = 'your_jwt_secret_key';
+
+// Token generation on login
+const token = jwt.sign({ userId: user._id }, JWT_SECRET);
+
+// Token verification on each request
+jwt.verify(token, JWT_SECRET, (err, decoded) => {
+  if (err) {
+    // Token invalid or expired
+  } else {
+    // Token valid, userId = decoded.userId
+  }
+});
+```
+
+### Authentication Middleware
+
+All protected endpoints verify:
+
+1. **Token presence**: Authorization header must exist
+2. **Token validity**: Token must be valid and not expired
+3. **User existence**: User ID from token must exist in database
+4. **Role verification**: User must have 'management' role
+
+```javascript
+function authenticate(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    res.writeHead(401);
+    res.end('Unauthorized: No token provided');
+    return;
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) {
+      res.writeHead(403);
+      res.end(JSON.stringify({ message: 'Invalid token' }));
+      return;
+    }
+
+    const user = Meteor.users.findOne(decoded.userId);
+    if (!user || user.profile.role !== 'management') {
+      res.writeHead(403);
+      res.end(JSON.stringify({ message: 'Access denied' }));
+      return;
+    }
+
+    next();
+  });
+}
+```
+
+<Warning>
+**Security Note**: The JWT_SECRET must be changed from the default value before deploying to production.
+</Warning>
+
+## Mobile App Requirements
+
+### Device Requirements
+
+<CardGroup cols={2}>
+  <Card title="Operating System" icon="android">
+    Android 6.0 (Marshmallow) or higher
+  </Card>
+  
+  <Card title="Storage" icon="hard-drive">
+    Minimum 50MB free space
+  </Card>
+  
+  <Card title="Camera" icon="camera">
+    Rear camera required for photo capture
+  </Card>
+  
+  <Card title="GPS" icon="satellite">
+    GPS/Location services required
+  </Card>
+</CardGroup>
+
+### Permissions Required
+
+- **Internet**: For API communication
+- **Camera**: For taking photos
+- **Storage**: For saving photos temporarily
+- **Location**: For GPS coordinates
+- **Network State**: For checking connectivity
+
+## App Distribution
+
+The mobile app is distributed as an APK file:
+
+### Download Location
+
+```
+public/movilidapp.apk
+```
+
+Managers can download the APK from the web dashboard:
+
+```javascript
+management: [
+  {
+    key: '13',
+    icon: <SnippetsOutlined />,
+    label: 'Aplicativo',
+    onClick: () => download('/movilidapp.apk')
+  }
+]
+```
+
+### Installation Steps
+
+<Steps>
+  <Step title="Enable Unknown Sources">
+    Go to Settings → Security → Enable "Unknown Sources" to allow APK installation
+  </Step>
+  
+  <Step title="Download APK">
+    Login to web dashboard and click "Aplicativo" to download `movilidapp.apk`
+  </Step>
+  
+  <Step title="Install">
+    Open the downloaded APK file and tap "Install"
+  </Step>
+  
+  <Step title="Launch">
+    Open the Movilidad app from your app drawer
+  </Step>
+</Steps>
+
+<Info>
+The app is not available on Google Play Store and must be installed manually via APK.
+</Info>
+
+## Offline Capability
+
+The mobile app is designed to work offline:
+
+1. **Data Sync**: Assigned records are downloaded and stored locally
+2. **Form Submission**: Visit data is queued when offline
+3. **Photo Storage**: Photos are stored locally until upload
+4. **Auto Sync**: When connection is restored, data syncs automatically
+
+<Note>
+Managers should sync data regularly when they have internet connectivity to avoid data loss.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation Guide" icon="download" href="/mobile/installation">
+    Step-by-step installation instructions
+  </Card>
+  
+  <Card title="Usage Guide" icon="book" href="/mobile/usage">
+    Learn how to use the mobile app effectively
+  </Card>
+  
+  <Card title="Authentication" icon="key" href="/guide/authentication">
+    Understand mobile authentication
+  </Card>
+  
+  <Card title="Photo Management" icon="camera" href="/guide/photo-management">
+    Learn about photo requirements and upload process
+  </Card>
+</CardGroup>

@@ -1,0 +1,401 @@
+---
+title: Installation
+description: Set up your Movilidad development environment and install all required dependencies
+---
+
+## Prerequisites
+
+Before installing Movilidad, ensure you have the following installed on your system:
+
+<CardGroup cols={2}>
+  <Card title="Node.js" icon="node-js">
+    Version 20.15.1 or higher
+  </Card>
+  <Card title="MongoDB" icon="database">
+    Version 4.4 or higher
+  </Card>
+  <Card title="Meteor" icon="meteor">
+    Version 3.0.1 (will be installed automatically)
+  </Card>
+  <Card title="Git" icon="git">
+    For version control
+  </Card>
+</CardGroup>
+
+## Installing Node.js
+
+### macOS
+
+```bash
+# Using Homebrew
+brew install node@20
+
+# Verify installation
+node --version  # Should show v20.15.1 or higher
+npm --version
+```
+
+### Linux (Ubuntu/Debian)
+
+```bash
+# Install Node.js 20
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Verify installation
+node --version
+npm --version
+```
+
+### Windows
+
+Download and install from [nodejs.org](https://nodejs.org/)
+
+<Note>
+Meteor officially supports macOS and Linux. Windows users should use WSL2 (Windows Subsystem for Linux).
+</Note>
+
+## Installing MongoDB
+
+### macOS
+
+```bash
+# Using Homebrew
+brew tap mongodb/brew
+brew install mongodb-community@7.0
+
+# Start MongoDB
+brew services start mongodb-community@7.0
+
+# Verify it's running
+mongosh --eval "db.adminCommand('ping')"
+```
+
+### Linux (Ubuntu/Debian)
+
+```bash
+# Import MongoDB public GPG key
+curl -fsSL https://pgp.mongodb.com/server-7.0.asc | \
+   sudo gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor
+
+# Add MongoDB repository
+echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | \
+   sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+
+# Install MongoDB
+sudo apt-get update
+sudo apt-get install -y mongodb-org
+
+# Start MongoDB
+sudo systemctl start mongod
+sudo systemctl enable mongod
+
+# Verify it's running
+mongosh --eval "db.adminCommand('ping')"
+```
+
+## Installing Meteor
+
+Meteor will be installed automatically when you run the application, but you can install it manually:
+
+```bash
+# macOS/Linux
+curl https://install.meteor.com/ | sh
+
+# Verify installation
+meteor --version  # Should show Meteor 3.0.1
+```
+
+<Info>
+Meteor comes with its own bundled Node.js and MongoDB for development, but we recommend using system MongoDB for production.
+</Info>
+
+## Cloning the Repository
+
+Clone the Movilidad repository to your local machine:
+
+```bash
+# Clone the repository
+git clone <repository-url> movilidad
+cd movilidad
+```
+
+## Installing Dependencies
+
+<Steps>
+  <Step title="Navigate to Project Directory">
+    ```bash
+    cd movilidad
+    ```
+  </Step>
+  
+  <Step title="Install NPM Dependencies">
+    ```bash
+    npm install
+    ```
+    
+    This installs all dependencies from `package.json`:
+    
+    - **antd** (5.20.0): UI component library
+    - **react** (18.2.0): Frontend framework
+    - **moment** (2.30.1): Date manipulation
+    - **xlsx**: Excel file processing
+    - **jsonwebtoken** (9.0.2): JWT authentication
+    - **multer** (1.4.5): File upload handling
+    - **file-saver** (2.0.5): File download utility
+  </Step>
+  
+  <Step title="Verify Meteor Packages">
+    Meteor will automatically install packages from `.meteor/packages`:
+    
+    ```bash
+    meteor list
+    ```
+    
+    You should see packages including:
+    - `accounts-password`: User authentication
+    - `react-meteor-data`: React integration
+    - `ostrio:files`: File management
+    - `meteorhacks:picker`: REST API
+  </Step>
+</Steps>
+
+## Project Structure
+
+After installation, your project structure should look like:
+
+```
+movilidad/
+├── .meteor/               # Meteor configuration
+│   ├── packages          # Meteor packages list
+│   ├── release           # Meteor version
+│   └── versions          # Package versions
+├── client/
+│   └── main.jsx          # Client entry point
+├── server/
+│   └── main.js           # Server entry point
+├── imports/
+│   ├── api/              # Server-side API
+│   │   ├── records/      # Records collection & methods
+│   │   ├── photos/       # Photo management
+│   │   ├── documents/    # Document storage
+│   │   └── roles/        # Role management
+│   └── ui/               # React components
+│       ├── components/   # UI components
+│       ├── contexts/     # React contexts
+│       ├── hooks/        # Custom hooks
+│       └── utils/        # Utility functions
+├── public/               # Static assets
+│   ├── logo-image.png
+│   ├── logo-mini.png
+│   └── movilidapp.apk    # Mobile app
+├── settings.json         # Configuration file
+├── package.json          # NPM dependencies
+├── Dockerfile            # Docker configuration
+└── README.md
+```
+
+## Verifying Installation
+
+Verify all components are installed correctly:
+
+<Tabs>
+  <Tab title="Check Node & NPM">
+    ```bash
+    node --version
+    # Should output: v20.15.1 or higher
+    
+    npm --version
+    # Should output: 10.x or higher
+    ```
+  </Tab>
+  
+  <Tab title="Check Meteor">
+    ```bash
+    meteor --version
+    # Should output: Meteor 3.0.1
+    ```
+  </Tab>
+  
+  <Tab title="Check MongoDB">
+    ```bash
+    mongosh --version
+    # Should output version 2.x or higher
+    
+    # Test connection
+    mongosh --eval "db.version()"
+    ```
+  </Tab>
+  
+  <Tab title="Check Dependencies">
+    ```bash
+    npm list --depth=0
+    # Should show all installed packages
+    ```
+  </Tab>
+</Tabs>
+
+## Creating Data Directory
+
+Create the directory for photo storage:
+
+```bash
+mkdir -p /data/photos
+
+# Set appropriate permissions
+chmod 755 /data/photos
+```
+
+<Warning>
+The application stores uploaded photos at `/data/photos`. Ensure this directory exists and has write permissions.
+</Warning>
+
+## Development vs Production
+
+### Development Setup
+
+For development, Meteor includes everything you need:
+
+```bash
+# Start development server
+meteor run
+
+# With settings file
+meteor run --settings settings.json
+
+# On custom port
+meteor run --port 4000
+```
+
+### Production Setup
+
+For production deployment:
+
+<Steps>
+  <Step title="Build the Application">
+    ```bash
+    meteor build ../build --directory
+    ```
+  </Step>
+  
+  <Step title="Install Production Dependencies">
+    ```bash
+    cd ../build/bundle/programs/server
+    npm install --production
+    ```
+  </Step>
+  
+  <Step title="Set Environment Variables">
+    ```bash
+    export MONGO_URL=mongodb://localhost:27017/movilidad
+    export ROOT_URL=https://your-domain.com
+    export PORT=3000
+    ```
+  </Step>
+  
+  <Step title="Start the Application">
+    ```bash
+    cd ../build/bundle
+    node main.js
+    ```
+  </Step>
+</Steps>
+
+## Docker Installation
+
+Alternatively, use Docker for easier deployment:
+
+```bash
+# Build Docker image
+docker build -t movilidad:latest .
+
+# Run container
+docker run -d \
+  --name movilidad \
+  -p 3000:3000 \
+  -e MONGO_URL=mongodb://mongo:27017/movilidad \
+  -e ROOT_URL=http://localhost:3000 \
+  -v /data/photos:/data/photos \
+  movilidad:latest
+```
+
+<Info>
+See the [Docker deployment guide](/deployment/docker) for complete Docker configuration.
+</Info>
+
+## Troubleshooting
+
+### Meteor Installation Issues
+
+<Accordion title="Error: command not found: meteor">
+  Add Meteor to your PATH:
+  
+  ```bash
+  echo 'export PATH="$HOME/.meteor:$PATH"' >> ~/.bashrc
+  source ~/.bashrc
+  ```
+</Accordion>
+
+<Accordion title="Error: EACCES permission denied">
+  Fix npm permissions:
+  
+  ```bash
+  mkdir ~/.npm-global
+  npm config set prefix '~/.npm-global'
+  echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc
+  source ~/.bashrc
+  ```
+</Accordion>
+
+### MongoDB Connection Issues
+
+<Accordion title="Error: connect ECONNREFUSED 127.0.0.1:27017">
+  Ensure MongoDB is running:
+  
+  ```bash
+  # Check status
+  sudo systemctl status mongod
+  
+  # Start if not running
+  sudo systemctl start mongod
+  ```
+</Accordion>
+
+<Accordion title="Error: Authentication failed">
+  If using MongoDB with authentication, update `MONGO_URL`:
+  
+  ```bash
+  export MONGO_URL="mongodb://username:password@localhost:27017/movilidad?authSource=admin"
+  ```
+</Accordion>
+
+### Build Issues
+
+<Accordion title="Error: Unable to resolve some modules">
+  Clear Meteor cache and reinstall:
+  
+  ```bash
+  meteor reset
+  meteor npm install
+  meteor run
+  ```
+</Accordion>
+
+## Next Steps
+
+Now that you have Movilidad installed:
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/getting-started/configuration">
+    Set up your settings.json and environment variables
+  </Card>
+  <Card title="First User" icon="user-plus" href="/getting-started/first-user">
+    Create your first admin user and understand roles
+  </Card>
+  <Card title="Development" icon="code" href="/guide/authentication">
+    Start developing with the user guide
+  </Card>
+  <Card title="Deployment" icon="rocket" href="/architecture">
+    Learn about production deployment
+  </Card>
+</CardGroup>

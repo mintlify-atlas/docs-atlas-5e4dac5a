@@ -1,0 +1,604 @@
+---
+title: Mobile App Usage
+description: Complete guide to using the Movilidad mobile app for field operations
+---
+
+## Getting Started
+
+Once you've installed and logged into the Movilidad mobile app, you're ready to start completing field visits.
+
+## App Interface
+
+The mobile app has a simple, focused interface designed for field use:
+
+<CardGroup cols={2}>
+  <Card title="Orders List" icon="list">
+    Main screen showing all assigned service orders
+  </Card>
+  
+  <Card title="Order Details" icon="file-lines">
+    Detailed view of customer and service information
+  </Card>
+  
+  <Card title="Visit Form" icon="clipboard">
+    Form to record visit results and observations
+  </Card>
+  
+  <Card title="Camera" icon="camera">
+    Photo capture interface for evidence
+  </Card>
+</CardGroup>
+
+## Viewing Assigned Orders
+
+### Orders List Screen
+
+When you open the app, you'll see a list of service orders assigned to you:
+
+<Steps>
+  <Step title="Login">
+    Enter your username and password, then tap "Login"
+  </Step>
+  
+  <Step title="View Orders">
+    After login, you'll see your assigned orders list:
+    
+    - Order number (NUMERO_DE_LA_ORDEN)
+    - Customer name
+    - Address
+    - Status (Pending/Completed)
+    - Debt amount
+  </Step>
+  
+  <Step title="Refresh">
+    Pull down on the list to refresh and sync with server
+  </Step>
+  
+  <Step title="Filter/Search">
+    Use search or filter options to find specific orders
+  </Step>
+</Steps>
+
+### Order Status Indicators
+
+- **Pending** (Yellow/Orange): Not yet visited
+- **Completed** (Green): Visit submitted
+- **Synced** (Blue checkmark): Data uploaded to server
+- **Offline** (Gray): Waiting for internet to sync
+
+## Completing a Field Visit
+
+### Step-by-Step Workflow
+
+<Steps>
+  <Step title="Select an Order">
+    From the orders list, tap on the service order you want to visit
+  </Step>
+  
+  <Step title="Review Customer Information">
+    Check the order details:
+    - Customer name and ID
+    - Service address
+    - Debt amount
+    - Product type
+    - Previous visit history (if any)
+  </Step>
+  
+  <Step title="Navigate to Location">
+    Use the address or GPS coordinates to navigate to the service location
+    
+    <Info>
+    Some versions of the app may have integrated map navigation.
+    </Info>
+  </Step>
+  
+  <Step title="Perform Site Visit">
+    At the location:
+    - Verify address
+    - Contact customer if possible
+    - Inspect meter/service
+    - Note property condition
+  </Step>
+  
+  <Step title="Fill Out Visit Form">
+    Complete the visit form with required information (see next section)
+  </Step>
+  
+  <Step title="Take Photos">
+    Capture 1-2 photos as evidence:
+    - Meter reading
+    - Property exterior
+    - Customer interaction proof
+    - Service equipment
+  </Step>
+  
+  <Step title="Submit">
+    Tap "Submit" or "Guardar" to save the visit data
+    
+    If online: Data syncs immediately
+    If offline: Data queued for sync when online
+  </Step>
+</Steps>
+
+## Visit Form Fields
+
+The visit form collects comprehensive data:
+
+### Required Fields
+
+<Tabs>
+  <Tab title="Visit Outcome">
+    **Resultado de gestión** (Visit Result)
+    
+    Select from:
+    - Contacto exitoso (Successful contact)
+    - No contacto (No contact)
+    - Predio cerrado (Property closed)
+    - Dirección incorrecta (Wrong address)
+    - Cliente ausente (Customer absent)
+  </Tab>
+  
+  <Tab title="Service Status">
+    **Estado del servicio** (Service Status)
+    
+    Options:
+    - Activo (Active)
+    - Suspendido (Suspended)
+    - Cortado (Cut off)
+    - Reconectado (Reconnected)
+  </Tab>
+  
+  <Tab title="Visit Date">
+    **Fecha de gestión** (Visit Date)
+    
+    Automatically set to current date, can be adjusted if needed
+  </Tab>
+</Tabs>
+
+### Payment Information
+
+<Tabs>
+  <Tab title="Payment Status">
+    **Causal de pago** (Payment Reason)
+    
+    If customer made or promised payment:
+    - Pago total (Full payment)
+    - Pago parcial (Partial payment)
+    - Acuerdo de pago (Payment agreement)
+    - Promesa de pago (Payment promise)
+  </Tab>
+  
+  <Tab title="Non-Payment">
+    **Causal de no pago** (Non-payment Reason)
+    
+    If no payment:
+    - Sin recursos (No resources)
+    - Desacuerdo con deuda (Disputes debt)
+    - Desempleo (Unemployment)
+    - Servicio deficiente (Poor service)
+  </Tab>
+  
+  <Tab title="Receipt Data">
+    **Recibo y Valor** (Receipt and Amount)
+    
+    If payment received:
+    - Receipt number
+    - Payment amount
+  </Tab>
+</Tabs>
+
+### Property Information
+
+<Tabs>
+  <Tab title="Housing Type">
+    **Tipo de vivienda** (Housing Type)
+    
+    - Casa (House)
+    - Apartamento (Apartment)
+    - Local comercial (Commercial)
+    - Lote (Lot)
+  </Tab>
+  
+  <Tab title="Property Use">
+    **Uso del predio** (Property Use)
+    
+    - Residencial (Residential)
+    - Comercial (Commercial)
+    - Industrial (Industrial)
+    - Mixto (Mixed)
+  </Tab>
+  
+  <Tab title="Resident Type">
+    **Tipo de habitante** (Resident Type)
+    
+    - Propietario (Owner)
+    - Arrendatario (Tenant)
+    - Familiar (Family member)
+    - Desocupado (Vacant)
+  </Tab>
+</Tabs>
+
+### Additional Data
+
+- **Contact Person**: Name of person contacted
+- **Phone Number**: Contact phone (if obtained)
+- **Meter Reading**: Current meter reading
+- **Observations**: Free text notes about the visit
+- **Number of Residents**: People living at property
+
+<Note>
+All form fields adapt based on previous selections. Not all fields may be required for every visit type.
+</Note>
+
+## Taking Photos
+
+### Photo Capture Process
+
+<Steps>
+  <Step title="Tap Camera Button">
+    In the visit form, tap the camera icon or "Take Photo" button
+  </Step>
+  
+  <Step title="Position Camera">
+    Frame your shot:
+    - Ensure good lighting
+    - Meter/service equipment clearly visible
+    - No sensitive personal information in frame
+  </Step>
+  
+  <Step title="Capture Photo">
+    Tap the capture button
+    
+    You can take up to 2 photos per visit
+  </Step>
+  
+  <Step title="Review Photo">
+    Check the photo quality:
+    - Clear and in focus
+    - Relevant information visible
+    - Proper orientation
+    
+    Retake if needed
+  </Step>
+  
+  <Step title="Save">
+    Accept the photo to attach it to the visit
+  </Step>
+</Steps>
+
+### Photo Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Lighting" icon="sun">
+    Take photos in good lighting conditions, avoid dark or shadowy areas
+  </Card>
+  
+  <Card title="Focus" icon="bullseye">
+    Ensure meter readings and key details are in focus and readable
+  </Card>
+  
+  <Card title="Relevance" icon="check-circle">
+    Capture evidence relevant to the visit (meter, property, service)
+  </Card>
+  
+  <Card title="Privacy" icon="user-lock">
+    Avoid capturing faces, personal documents, or private information
+  </Card>
+</CardGroup>
+
+### Photo Requirements
+
+- **Format**: JPG, PNG, JPEG
+- **Size**: Maximum 10MB per photo
+- **Quantity**: 1-2 photos per visit
+- **Orientation**: Portrait or landscape (auto-detected)
+
+<Warning>
+Photos larger than 10MB will be rejected. Most modern phones produce acceptable file sizes, but avoid using maximum resolution settings.
+</Warning>
+
+## GPS Location
+
+The app automatically captures your GPS coordinates:
+
+### How GPS Works
+
+1. **Permission**: Ensure location permission is granted
+2. **GPS Signal**: App acquires GPS when you open an order
+3. **Accuracy**: Waits for reasonable accuracy (usually less than 50 meters)
+4. **Capture**: Coordinates saved with visit submission
+5. **Display**: Latitude/longitude shown in form
+
+### GPS Indicators
+
+- **Green**: Good GPS signal (< 20m accuracy)
+- **Yellow**: Fair GPS signal (20-50m accuracy)
+- **Red**: Poor GPS signal (> 50m accuracy)
+- **Gray**: No GPS signal
+
+<Info>
+GPS works best outdoors with clear sky view. Inside buildings or in dense urban areas, accuracy may be reduced.
+</Info>
+
+## Offline Mode
+
+The app functions without internet:
+
+### Offline Capabilities
+
+<Tabs>
+  <Tab title="View Orders">
+    All assigned orders are cached locally and viewable offline
+  </Tab>
+  
+  <Tab title="Fill Forms">
+    Complete visit forms without internet connection
+  </Tab>
+  
+  <Tab title="Take Photos">
+    Capture photos offline (stored locally)
+  </Tab>
+  
+  <Tab title="Queue Submissions">
+    Submissions are queued and will sync when online
+  </Tab>
+</Tabs>
+
+### Syncing Data
+
+<Steps>
+  <Step title="Connect to Internet">
+    When you have WiFi or mobile data connection
+  </Step>
+  
+  <Step title="Auto-Sync">
+    App automatically detects connection and starts syncing
+    
+    Or manually sync by pulling down on orders list
+  </Step>
+  
+  <Step title="Upload Queue">
+    Queued submissions upload in order:
+    1. Visit data
+    2. Photos
+    3. Status updates
+  </Step>
+  
+  <Step title="Verify Sync">
+    Check for sync confirmation:
+    - Green checkmark on synced orders
+    - "Synced" status indicator
+    - Removal from queue count
+  </Step>
+</Steps>
+
+<Warning>
+**Important**: Sync regularly to avoid data loss. Don't uninstall the app with pending submissions!
+</Warning>
+
+## Managing Your Work
+
+### Daily Workflow
+
+<Steps>
+  <Step title="Morning: Sync">
+    Start your day by syncing:
+    - Connect to WiFi
+    - Open app and pull to refresh
+    - Download new assignments
+    - Upload previous day's work
+  </Step>
+  
+  <Step title="Field Work">
+    Throughout the day:
+    - Work through your orders list
+    - Complete visits and forms
+    - Take required photos
+    - App queues submissions
+  </Step>
+  
+  <Step title="End of Day: Sync">
+    Before going offline:
+    - Find WiFi or good data connection
+    - Let app sync all submissions
+    - Verify all orders show as synced
+    - Check for new assignments
+  </Step>
+</Steps>
+
+### Tracking Progress
+
+- **Total Orders**: View total assignments
+- **Pending**: Orders not yet visited
+- **Completed**: Visits submitted
+- **Synced**: Data uploaded to server
+- **Queue**: Waiting to upload
+
+## Common Operations
+
+### Searching for an Order
+
+1. Tap search icon on orders list
+2. Enter:
+   - Order number
+   - Customer name
+   - Address
+3. Results filter as you type
+
+### Filtering Orders
+
+Filter by:
+- **Status**: Pending, Completed, All
+- **Date**: Today, This Week, All Time
+- **Sync Status**: Synced, Pending Upload
+
+### Viewing Visit History
+
+For orders with previous visits:
+1. Open the order
+2. Tap "History" or "Historial"
+3. View previous visit dates and results
+
+### Editing a Submission
+
+<Warning>
+Once synced, submissions cannot be edited from mobile app. Contact your leader for corrections.
+</Warning>
+
+Before sync:
+1. Find the order in your list
+2. Tap to open
+3. Modify form fields
+4. Re-submit
+
+## Troubleshooting
+
+<Accordion title="GPS not working">
+  **Solutions:**
+  
+  1. Enable location services:
+     - Settings → Location → ON
+  2. Grant permission to app:
+     - Settings → Apps → Movilidad → Permissions → Location → Allow
+  3. Move outdoors for better signal
+  4. Restart the app
+  5. Restart your device
+</Accordion>
+
+<Accordion title="Photos won't upload">
+  **Check:**
+  
+  1. Photo file size (must be < 10MB)
+  2. Photo format (JPG, PNG, JPEG only)
+  3. Internet connection
+  4. Storage permission granted
+  5. Sufficient storage space on device
+  
+  **Try:**
+  
+  - Retake photo at lower resolution
+  - Connect to WiFi for upload
+  - Clear app cache
+</Accordion>
+
+<Accordion title="Submissions stuck in queue">
+  **Solutions:**
+  
+  1. Check internet connection
+  2. Force sync:
+     - Pull down on orders list
+  3. Check server status (ask leader)
+  4. Verify login session is active
+  5. Logout and login again
+  6. As last resort, contact support
+</Accordion>
+
+<Accordion title="Can't see new assignments">
+  **Try:**
+  
+  1. Pull to refresh on orders list
+  2. Logout and login again
+  3. Check with leader that orders are assigned
+  4. Verify internet connection
+  5. Clear app cache and reload
+</Accordion>
+
+<Accordion title="App running slowly">
+  **Improve performance:**
+  
+  1. Close other apps
+  2. Restart device
+  3. Clear app cache:
+     - Settings → Apps → Movilidad → Storage → Clear Cache (NOT Clear Data)
+  4. Delete old photos from device
+  5. Update to latest APK version
+</Accordion>
+
+<Accordion title="Form won't submit">
+  **Check:**
+  
+  1. All required fields completed
+  2. Date format correct
+  3. No invalid characters in text fields
+  4. GPS coordinates captured
+  5. Internet connection
+  
+  **Error messages:**
+  
+  Read error message carefully - it usually indicates which field has an issue.
+</Accordion>
+
+## Data Management
+
+### What's Stored Locally
+
+- Assigned orders (full details)
+- Pending submissions (queued)
+- Cached photos (until uploaded)
+- Login token (for session)
+- App preferences
+
+### What's NOT Stored
+
+- Your password (only token)
+- Other managers' data
+- Completed and synced submissions
+- Server-side reports
+
+### Clearing Data
+
+<Warning>
+Only clear app data if instructed by support. This will delete all pending submissions!
+</Warning>
+
+1. Sync all pending work first
+2. Settings → Apps → Movilidad → Storage
+3. Clear Cache (safe) OR Clear Data (deletes everything)
+
+## Tips for Efficient Field Work
+
+<CardGroup cols={2}>
+  <Card title="Pre-Download" icon="download">
+    Sync all assignments before leaving WiFi coverage
+  </Card>
+  
+  <Card title="Batch Work" icon="layer-group">
+    Complete multiple visits before syncing to save battery and data
+  </Card>
+  
+  <Card title="Plan Route" icon="route">
+    Review addresses and plan efficient route through your assignments
+  </Card>
+  
+  <Card title="Battery Life" icon="battery-three-quarters">
+    Close app between visits to conserve battery, especially GPS
+  </Card>
+  
+  <Card title="Photo Quality" icon="image">
+    Find good lighting and angle before taking photos to avoid retakes
+  </Card>
+  
+  <Card title="Notes" icon="note-sticky">
+    Use observations field to record important details for later reference
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Photo Management" icon="camera" href="/guide/photo-management">
+    Learn more about photo requirements and best practices
+  </Card>
+  
+  <Card title="Reports" icon="chart-bar" href="/guide/reports">
+    See how your work appears in reports
+  </Card>
+  
+  <Card title="User Roles" icon="users" href="/guide/user-roles">
+    Understand your role and permissions
+  </Card>
+  
+  <Card title="Managing Records" icon="table" href="/guide/managing-records">
+    Learn how records are assigned to you
+  </Card>
+</CardGroup>

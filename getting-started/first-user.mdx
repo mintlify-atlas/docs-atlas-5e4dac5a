@@ -1,0 +1,582 @@
+---
+title: Creating Your First User
+description: Learn how to create users, understand roles, and set up your first admin account in Movilidad
+---
+
+## Understanding User Roles
+
+Movilidad has a three-tier role system, each with specific permissions and workflows:
+
+<CardGroup cols={3}>
+  <Card title="Admin" icon="shield-halved">
+    **Highest Level**
+    
+    - Create all types of users
+    - Assign managers to leaders
+    - View cross-project reports
+    - Access all system features
+  </Card>
+  
+  <Card title="Leader" icon="users">
+    **Mid Level**
+    
+    - Upload Excel records
+    - Assign managers to service orders
+    - Generate team reports
+    - Project-specific access
+  </Card>
+  
+  <Card title="Management" icon="clipboard-list">
+    **Field Level**
+    
+    - Mobile app access
+    - View assigned orders
+    - Update visit results
+    - Upload photos
+  </Card>
+</CardGroup>
+
+## Default Admin User
+
+On first startup, Movilidad automatically creates an admin user from `settings.json`:
+
+```javascript server/main.js
+import { Meteor } from 'meteor/meteor';
+import settings from '../settings.json';
+
+Meteor.startup(async () => {
+  const admin = Meteor.users.findOne({ 
+    username: settings.private.admin.user 
+  });
+  
+  if (!admin) {
+    Accounts.createUser({
+      username: settings.private.admin.user,
+      password: settings.private.admin.password,
+      profile: { role: 'admin' }
+    });
+  }
+});
+```
+
+### First Login
+
+<Steps>
+  <Step title="Start the Application">
+    ```bash
+    meteor run --settings settings.json
+    ```
+    
+    The app will be available at `http://localhost:3000`
+  </Step>
+  
+  <Step title="Access Login Page">
+    Navigate to `http://localhost:3000` in your browser
+    
+    You'll see the Discol Movilidad login screen
+  </Step>
+  
+  <Step title="Login with Default Credentials">
+    Use the credentials from your `settings.json`:
+    
+    - **Username**: `admin` (default)
+    - **Password**: `admin` (default)
+    
+    <Warning>
+    Change these default credentials immediately after first login!
+    </Warning>
+  </Step>
+  
+  <Step title="Access Admin Dashboard">
+    After login, you'll see the main dashboard with admin menu options:
+    - Crear usuario (Create user)
+    - Gestores (Managers)
+    - Asignaciones (Assignments)
+  </Step>
+</Steps>
+
+## Creating Users as Admin
+
+Administrators can create new users through the web interface:
+
+### Using the Web Interface
+
+<Steps>
+  <Step title="Navigate to User Creation">
+    Click **"Crear usuario"** (Create user) in the sidebar menu
+  </Step>
+  
+  <Step title="Fill in User Details">
+    Enter the required information:
+    
+    - **Username**: Unique identifier for login
+    - **Password**: User's password (they should change it)
+    - **Role**: Select from dropdown
+      - Lider (Leader)
+      - Gestor (Management)
+    - **Project**: Select project assignment
+      - Movilidad
+      - Sierra
+  </Step>
+  
+  <Step title="Submit the Form">
+    Click **"Crear usuario"** (Create user) button
+    
+    You'll see a success message: "Usuario creado con éxito"
+  </Step>
+</Steps>
+
+<Info>
+Only admins can create other users. Leaders and managers cannot create accounts.
+</Info>
+
+### Using Meteor Methods
+
+Programmatically create users with the `createUserWithRole` method:
+
+```javascript
+Meteor.call(
+  'createUserWithRole',
+  'john_leader',      // username
+  'securePass123',    // password
+  'leader',           // role: 'admin', 'leader', or 'management'
+  'movilidad',        // project: 'movilidad' or 'sierra'
+  (error) => {
+    if (error) {
+      console.error('Error creating user:', error.reason);
+    } else {
+      console.log('User created successfully');
+    }
+  }
+);
+```
+
+### User Profile Structure
+
+Each user has a profile with role and project information:
+
+```javascript
+{
+  _id: 'user123',
+  username: 'john_leader',
+  services: {
+    password: { /* hashed password */ }
+  },
+  profile: {
+    role: 'leader',
+    project: 'movilidad',
+    managers: ['managerId1', 'managerId2'] // Only for leaders
+  },
+  createdAt: ISODate('2024-03-04T...')
+}
+```
+
+## Role Permissions
+
+### Admin Permissions
+
+Admins have access to all features:
+
+<Tabs>
+  <Tab title="User Management">
+    ```javascript
+    // Create any type of user
+    Meteor.call('createUserWithRole', username, password, role, project);
+    
+    // Get all leaders
+    Meteor.call('getLeaders', userId, (err, leaders) => {
+      // Returns all users with role: 'leader'
+    });
+    
+    // Get all managers
+    Meteor.call('getAllManagers', userId, (err, managers) => {
+      // Returns all users with role: 'management'
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Manager Assignment">
+    ```javascript
+    // Assign managers to a leader
+    Meteor.call('assignManagersToLeader', leaderId, [managerId1, managerId2]);
+    
+    // Get managers for a specific leader
+    Meteor.call('getManagersForLeader', leaderId, (err, managerIds) => {
+      // Returns array of manager IDs assigned to leader
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Cross-Project Reports">
+    ```javascript
+    // View reports from all projects and leaders
+    Meteor.call('reportManagement', {
+      page: 1,
+      pageSize: 50,
+      leaderId: 'anyLeaderId', // Can view any leader's data
+      managerId: 'anyManagerId',
+      assigneds: true
+    });
+    ```
+  </Tab>
+</Tabs>
+
+### Leader Permissions
+
+Leaders manage their team and records:
+
+<Tabs>
+  <Tab title="Record Upload">
+    ```javascript
+    // Upload Excel file with service records
+    // Records are automatically associated with leader's project
+    Meteor.call('createRecord', record, leaderId);
+    ```
+  </Tab>
+  
+  <Tab title="Manager Assignment">
+    ```javascript
+    // Assign their managers to service orders
+    Meteor.call('updateRecordManager', 
+      recordId, 
+      managerId, 
+      leaderId, 
+      serviceType
+    );
+    
+    // Get their assigned managers
+    Meteor.call('getManagers', leaderId, (err, managers) => {
+      // Returns managers assigned to this leader
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Team Reports">
+    ```javascript
+    // View reports for their project only
+    Meteor.call('reportManagement', {
+      page: 1,
+      pageSize: 50,
+      leaderId: this.userId, // Can only view their own data
+      managerId: 'theirManagerId'
+    });
+    ```
+  </Tab>
+</Tabs>
+
+### Management (Gestor) Permissions
+
+Field workers use the mobile app:
+
+<Tabs>
+  <Tab title="Mobile Authentication">
+    ```bash
+    # Login via REST API
+    POST /login
+    Content-Type: application/json
+    
+    {
+      "username": "manager1",
+      "password": "password"
+    }
+    
+    # Response
+    {
+      "token": "eyJhbGciOiJIUzI1NiIs..."
+    }
+    ```
+  </Tab>
+  
+  <Tab title="View Assigned Orders">
+    ```bash
+    # Get assigned service orders
+    GET /management/:username
+    Authorization: Bearer <token>
+    
+    # Returns array of assigned records
+    ```
+  </Tab>
+  
+  <Tab title="Update Records">
+    ```bash
+    # Submit field visit results
+    POST /management
+    Authorization: Bearer <token>
+    Content-Type: application/json
+    
+    {
+      "NUMERO_DE_LA_ORDEN": "12345",
+      "fecha_gestion": "04/03/2024",
+      "resultado_de_gestion": "Contacto exitoso",
+      "observacion": "Cliente aceptó pago",
+      "ubicacion": {
+        "latitud": 10.123456,
+        "longitud": -75.123456
+      },
+      "status": "reviewed"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Creating Different User Types
+
+### Creating a Leader
+
+```javascript
+// As admin, create a leader for the Movilidad project
+Meteor.call(
+  'createUserWithRole',
+  'maria_leader',
+  'secure123',
+  'leader',
+  'movilidad',
+  (error) => {
+    if (!error) {
+      console.log('Leader created successfully');
+    }
+  }
+);
+```
+
+Leaders need managers assigned:
+
+```javascript
+// Create some managers first
+const managerIds = [];
+
+// Then assign to leader
+Meteor.call('assignManagersToLeader', leaderUserId, managerIds);
+```
+
+### Creating a Manager (Gestor)
+
+```javascript
+// As admin, create a field manager
+Meteor.call(
+  'createUserWithRole',
+  'carlos_gestor',
+  'mobile123',
+  'management',
+  'movilidad',
+  (error) => {
+    if (!error) {
+      console.log('Manager created successfully');
+      // Manager can now login via mobile app
+    }
+  }
+);
+```
+
+<Note>
+Managers need to be assigned to a leader before they can receive service orders.
+</Note>
+
+## Assigning Managers to Leaders
+
+Admins must assign managers to leaders:
+
+<Steps>
+  <Step title="Navigate to Manager Assignment">
+    Click **"Gestores"** (Managers) in the admin sidebar
+  </Step>
+  
+  <Step title="Select a Leader">
+    Choose the leader from the dropdown list
+  </Step>
+  
+  <Step title="Select Managers">
+    Choose one or more managers to assign to this leader
+  </Step>
+  
+  <Step title="Save Assignment">
+    Click the save/assign button
+    
+    The managers are now associated with that leader
+  </Step>
+</Steps>
+
+### Programmatic Assignment
+
+```javascript
+// Get leader user ID
+const leader = Meteor.users.findOne({ username: 'maria_leader' });
+
+// Get manager user IDs
+const managers = Meteor.users.find({ 
+  'profile.role': 'management',
+  'profile.project': 'movilidad'
+}).fetch();
+
+const managerIds = managers.map(m => m._id);
+
+// Assign managers to leader
+Meteor.call('assignManagersToLeader', leader._id, managerIds);
+```
+
+## User Workflow Example
+
+Here's a complete workflow showing the relationship between roles:
+
+<Steps>
+  <Step title="Admin Creates Users">
+    ```javascript
+    // Admin creates leader
+    Meteor.call('createUserWithRole', 'leader1', 'pass', 'leader', 'movilidad');
+    
+    // Admin creates managers
+    Meteor.call('createUserWithRole', 'manager1', 'pass', 'management', 'movilidad');
+    Meteor.call('createUserWithRole', 'manager2', 'pass', 'management', 'movilidad');
+    ```
+  </Step>
+  
+  <Step title="Admin Assigns Managers">
+    ```javascript
+    // Get user IDs
+    const leaderId = Meteor.users.findOne({ username: 'leader1' })._id;
+    const manager1Id = Meteor.users.findOne({ username: 'manager1' })._id;
+    const manager2Id = Meteor.users.findOne({ username: 'manager2' })._id;
+    
+    // Assign managers to leader
+    Meteor.call('assignManagersToLeader', leaderId, [manager1Id, manager2Id]);
+    ```
+  </Step>
+  
+  <Step title="Leader Uploads Records">
+    ```javascript
+    // Leader logs in and uploads Excel file with service orders
+    // Each record is associated with the leader's project
+    ```
+  </Step>
+  
+  <Step title="Leader Assigns Orders">
+    ```javascript
+    // Leader assigns specific orders to their managers
+    Meteor.call('updateRecordManager', 'ORDER-12345', manager1Id, leaderId, 'cartera');
+    ```
+  </Step>
+  
+  <Step title="Manager Completes Field Work">
+    ```javascript
+    // Manager logs into mobile app
+    // Views assigned orders
+    // Visits location
+    // Submits results via mobile API
+    ```
+  </Step>
+  
+  <Step title="Leader Reviews Reports">
+    ```javascript
+    // Leader views reports showing:
+    // - Total assigned orders
+    // - Completed orders by manager
+    // - Pending orders
+    // - Financial metrics
+    ```
+  </Step>
+</Steps>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Strong Passwords" icon="lock">
+    Enforce strong passwords for all users, especially admins
+  </Card>
+  
+  <Card title="Role Separation" icon="users">
+    Don't give users higher permissions than needed
+  </Card>
+  
+  <Card title="Project Isolation" icon="building">
+    Keep projects separate to prevent data mixing
+  </Card>
+  
+  <Card title="Regular Audits" icon="clipboard-check">
+    Periodically review user accounts and permissions
+  </Card>
+</CardGroup>
+
+## Changing User Passwords
+
+Currently, passwords must be changed via server console:
+
+```javascript
+// In Meteor shell (meteor shell)
+Accounts.setPassword(userId, 'newPassword');
+
+// Or by username
+const user = Meteor.users.findOne({ username: 'john_leader' });
+Accounts.setPassword(user._id, 'newSecurePassword');
+```
+
+<Warning>
+Implement a password change feature in your application for better security. Users should be able to change their own passwords.
+</Warning>
+
+## Troubleshooting
+
+<Accordion title="Cannot create admin user">
+  Check `settings.json` is loaded correctly:
+  
+  ```bash
+  meteor run --settings settings.json
+  ```
+  
+  Verify the file contains the admin credentials:
+  
+  ```json
+  {
+    "private": {
+      "admin": {
+        "user": "admin",
+        "password": "admin"
+      }
+    }
+  }
+  ```
+</Accordion>
+
+<Accordion title="User created but cannot login">
+  Verify the user was created correctly:
+  
+  ```javascript
+  // In meteor shell
+  Meteor.users.findOne({ username: 'username' });
+  ```
+  
+  Check that `services.password` exists and profile contains role.
+</Accordion>
+
+<Accordion title="Manager cannot see assigned records">
+  Ensure:
+  1. Manager is assigned to a leader
+  2. Leader has assigned orders to that manager
+  3. Both are in the same project
+  
+  ```javascript
+  // Check manager's leader assignment
+  const leaders = Meteor.users.find({ 
+    'profile.managers': { $in: [managerId] }
+  }).fetch();
+  ```
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication Guide" icon="key" href="/guide/authentication">
+    Learn about login flows and security
+  </Card>
+  
+  <Card title="Managing Records" icon="table" href="/guide/managing-records">
+    Start working with service orders
+  </Card>
+  
+  <Card title="User Roles" icon="users" href="/guide/user-roles">
+    Deep dive into role permissions
+  </Card>
+  
+  <Card title="Mobile App" icon="mobile" href="/mobile/overview">
+    Set up the mobile application
+  </Card>
+</CardGroup>

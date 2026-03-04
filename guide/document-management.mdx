@@ -1,0 +1,589 @@
+---
+title: Document Management
+description: Learn how to create, retrieve, and manage documents in Movilidad
+---
+
+## Overview
+
+Movilidad includes a document management system that allows leaders to store and retrieve documents associated with their projects.
+
+<Info>
+Documents are stored in MongoDB and are separate from photos. They can represent agreements, reports, or any other text-based records.
+</Info>
+
+## Document Collection
+
+Documents are stored in a MongoDB collection:
+
+```javascript imports/api/documents/documentsCollection.js
+import { Mongo } from 'meteor/mongo';
+
+export const documentsCollection = new Mongo.Collection('documents');
+```
+
+### Document Structure
+
+Each document contains:
+
+```javascript
+{
+  _id: 'documentId123',
+  leaderId: 'userId', // Associated leader
+  title: 'Document title',
+  content: 'Document content or metadata',
+  type: 'report', // Custom field
+  createdAt: 1709582400000, // Timestamp
+  // ... additional custom fields
+}
+```
+
+## Creating Documents
+
+Documents are created using the `createDocument` method:
+
+```javascript imports/api/documents/documentsMethods.js
+import { Meteor } from 'meteor/meteor';
+import { documentsCollection } from './documentsCollection';
+
+Meteor.methods({
+  createDocument(data) {
+    documentsCollection.insert({ 
+      ...data, 
+      createdAt: Date.now() 
+    });
+  }
+});
+```
+
+### Creating a Document
+
+<Tabs>
+  <Tab title="From Client">
+    ```javascript
+    Meteor.call('createDocument', {
+      leaderId: Meteor.userId(),
+      title: 'Monthly Report',
+      content: 'Report content here...',
+      type: 'report',
+      period: '03/2024'
+    }, (error) => {
+      if (error) {
+        console.error('Error creating document:', error);
+      } else {
+        console.log('Document created successfully');
+      }
+    });
+    ```
+  </Tab>
+  
+  <Tab title="From Server">
+    ```javascript
+    documentsCollection.insert({
+      leaderId: 'userId',
+      title: 'Automated Report',
+      content: JSON.stringify(reportData),
+      type: 'automated',
+      generatedAt: new Date(),
+      createdAt: Date.now()
+    });
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+The `createdAt` timestamp is automatically added by the method. You don't need to include it in the data parameter.
+</Note>
+
+## Retrieving Documents
+
+Documents are retrieved with pagination:
+
+```javascript imports/api/documents/documentsMethods.js
+Meteor.methods({
+  async getDocuments(page, pageSize, leaderId) {
+    page = parseInt(page, 10) || 1;
+    pageSize = parseInt(pageSize, 10) || 50;
+    
+    const documents = await documentsCollection
+      .rawCollection()
+      .aggregate([
+        { $match: { leaderId } },
+        { $sort: { createdAt: -1 } },
+        {
+          $facet: {
+            metadata: [{ $count: 'totalCount' }],
+            data: [
+              { $skip: (page - 1) * pageSize },
+              { $limit: pageSize }
+            ]
+          }
+        },
+        {
+          $project: {
+            data: 1,
+            totalCount: { $arrayElemAt: ['$metadata.totalCount', 0] }
+          }
+        }
+      ])
+      .toArray();
+
+    return {
+      data: documents[0].data,
+      total: documents[0].totalCount
+    };
+  }
+});
+```
+
+### Fetching Documents
+
+```javascript
+// Get first page of documents
+Meteor.call('getDocuments', 1, 20, Meteor.userId(), (error, result) => {
+  if (error) {
+    console.error('Error fetching documents:', error);
+  } else {
+    console.log('Documents:', result.data);
+    console.log('Total:', result.total);
+  }
+});
+```
+
+<Steps>
+  <Step title="Specify Page and Size">
+    ```javascript
+    const page = 1;
+    const pageSize = 20;
+    ```
+  </Step>
+  
+  <Step title="Provide Leader ID">
+    ```javascript
+    const leaderId = Meteor.userId(); // Current user
+    ```
+  </Step>
+  
+  <Step title="Call Method">
+    ```javascript
+    Meteor.call('getDocuments', page, pageSize, leaderId, callback);
+    ```
+  </Step>
+  
+  <Step title="Handle Results">
+    ```javascript
+    result = {
+      data: [/* array of documents */],
+      total: 42 // total count across all pages
+    }
+    ```
+  </Step>
+</Steps>
+
+## Document List Component
+
+Example React component for displaying documents:
+
+```javascript
+import React, { useState, useEffect } from 'react';
+import { Table, Typography } from 'antd';
+import moment from 'moment';
+
+const { Title } = Typography;
+
+export default function DocumentsList() {
+  const [documents, setDocuments] = useState([]);
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 20,
+    total: 0
+  });
+
+  const fetchDocuments = (page, pageSize) => {
+    Meteor.call(
+      'getDocuments',
+      page,
+      pageSize,
+      Meteor.userId(),
+      (error, result) => {
+        if (error) {
+          message.error('Error loading documents');
+        } else {
+          setDocuments(result.data);
+          setPagination(prev => ({
+            ...prev,
+            current: page,
+            total: result.total
+          }));
+        }
+      }
+    );
+  };
+
+  useEffect(() => {
+    fetchDocuments(pagination.current, pagination.pageSize);
+  }, []);
+
+  const handleTableChange = (newPagination) => {
+    fetchDocuments(newPagination.current, newPagination.pageSize);
+  };
+
+  const columns = [
+    {
+      title: 'Title',
+      dataIndex: 'title',
+      key: 'title'
+    },
+    {
+      title: 'Type',
+      dataIndex: 'type',
+      key: 'type'
+    },
+    {
+      title: 'Created',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      render: (timestamp) => moment(timestamp).format('DD/MM/YYYY HH:mm')
+    }
+  ];
+
+  return (
+    <div>
+      <Title level={2}>Documents</Title>
+      <Table
+        columns={columns}
+        dataSource={documents}
+        rowKey="_id"
+        pagination={pagination}
+        onChange={handleTableChange}
+      />
+    </div>
+  );
+}
+```
+
+## Document Types
+
+You can categorize documents using a `type` field:
+
+<Tabs>
+  <Tab title="Reports">
+    ```javascript
+    {
+      type: 'report',
+      title: 'Weekly Collection Report',
+      period: 'Week 10',
+      summary: { ... }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Agreements">
+    ```javascript
+    {
+      type: 'agreement',
+      title: 'Payment Agreement - Customer 12345',
+      customerId: '12345',
+      terms: 'Monthly payments of $100'
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Notes">
+    ```javascript
+    {
+      type: 'note',
+      title: 'Team Meeting Notes',
+      content: 'Discussion points...',
+      attendees: ['user1', 'user2']
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Custom">
+    ```javascript
+    {
+      type: 'escalation',
+      title: 'Escalated Case - Order 789',
+      orderId: '789',
+      reason: 'Customer complaint',
+      status: 'pending'
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Filtering Documents
+
+Extend the `getDocuments` method to support filtering:
+
+```javascript
+Meteor.methods({
+  async getDocuments(page, pageSize, leaderId, filters = {}) {
+    page = parseInt(page, 10) || 1;
+    pageSize = parseInt(pageSize, 10) || 50;
+    
+    // Build match criteria
+    const match = { leaderId, ...filters };
+    
+    const documents = await documentsCollection
+      .rawCollection()
+      .aggregate([
+        { $match: match },
+        { $sort: { createdAt: -1 } },
+        // ... rest of aggregation
+      ])
+      .toArray();
+
+    return {
+      data: documents[0].data,
+      total: documents[0].totalCount
+    };
+  }
+});
+```
+
+Usage:
+
+```javascript
+// Get only reports
+Meteor.call('getDocuments', 1, 20, Meteor.userId(), 
+  { type: 'report' }
+);
+
+// Get documents from specific period
+Meteor.call('getDocuments', 1, 20, Meteor.userId(),
+  { period: '03/2024' }
+);
+```
+
+## Updating Documents
+
+Add an update method:
+
+```javascript
+Meteor.methods({
+  updateDocument(documentId, updates) {
+    // Security check
+    const document = documentsCollection.findOne(documentId);
+    if (document.leaderId !== this.userId) {
+      throw new Meteor.Error('Unauthorized');
+    }
+    
+    documentsCollection.update(documentId, {
+      $set: {
+        ...updates,
+        updatedAt: Date.now()
+      }
+    });
+  }
+});
+```
+
+Usage:
+
+```javascript
+Meteor.call('updateDocument', documentId, {
+  title: 'Updated Title',
+  content: 'Updated content'
+});
+```
+
+## Deleting Documents
+
+Add a delete method:
+
+```javascript
+Meteor.methods({
+  deleteDocument(documentId) {
+    // Security check
+    const document = documentsCollection.findOne(documentId);
+    if (!document) {
+      throw new Meteor.Error('Document not found');
+    }
+    if (document.leaderId !== this.userId) {
+      throw new Meteor.Error('Unauthorized');
+    }
+    
+    documentsCollection.remove(documentId);
+  }
+});
+```
+
+Usage:
+
+```javascript
+Meteor.call('deleteDocument', documentId, (error) => {
+  if (error) {
+    message.error('Error deleting document');
+  } else {
+    message.success('Document deleted');
+  }
+});
+```
+
+## Document Publications
+
+For reactive data, add publications:
+
+```javascript imports/api/documents/documentsPublish.js
+import { Meteor } from 'meteor/meteor';
+import { documentsCollection } from './documentsCollection';
+
+Meteor.publish('documents.byLeader', function(leaderId) {
+  // Security check
+  if (this.userId !== leaderId) {
+    return this.ready();
+  }
+  
+  return documentsCollection.find(
+    { leaderId },
+    { sort: { createdAt: -1 }, limit: 100 }
+  );
+});
+
+Meteor.publish('documents.single', function(documentId) {
+  const document = documentsCollection.findOne(documentId);
+  
+  // Security check
+  if (!document || document.leaderId !== this.userId) {
+    return this.ready();
+  }
+  
+  return documentsCollection.find(documentId);
+});
+```
+
+Subscribe in components:
+
+```javascript
+import { useTracker } from 'meteor/react-meteor-data';
+import { documentsCollection } from '/imports/api/documents/documentsCollection';
+
+function DocumentsList() {
+  const { documents, isLoading } = useTracker(() => {
+    const handle = Meteor.subscribe('documents.byLeader', Meteor.userId());
+    
+    return {
+      documents: documentsCollection.find({}, 
+        { sort: { createdAt: -1 } }
+      ).fetch(),
+      isLoading: !handle.ready()
+    };
+  }, []);
+  
+  if (isLoading) return <Spinner />;
+  
+  return <DocumentTable documents={documents} />;
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Access Control" icon="lock">
+    Always verify leaderId matches current user before allowing operations
+  </Card>
+  
+  <Card title="Indexing" icon="database">
+    Create index on leaderId and createdAt for fast queries
+  </Card>
+  
+  <Card title="Pagination" icon="table">
+    Always use pagination for large document collections
+  </Card>
+  
+  <Card title="Validation" icon="check-circle">
+    Validate document data before insertion
+  </Card>
+</CardGroup>
+
+### Creating Indexes
+
+```javascript
+// In server startup
+Meteor.startup(() => {
+  documentsCollection.rawCollection().createIndex(
+    { leaderId: 1, createdAt: -1 }
+  );
+});
+```
+
+## Use Cases
+
+<Accordion title="Weekly Reports">
+  Store automated weekly performance reports:
+  
+  ```javascript
+  Meteor.call('createDocument', {
+    leaderId: Meteor.userId(),
+    type: 'weekly_report',
+    title: `Weekly Report - ${weekNumber}`,
+    period: `Week ${weekNumber}`,
+    metrics: {
+      assigned: 150,
+      completed: 120,
+      pending: 30,
+      revenue: 45000
+    },
+    generatedAt: new Date()
+  });
+  ```
+</Accordion>
+
+<Accordion title="Payment Agreements">
+  Record payment agreements with customers:
+  
+  ```javascript
+  Meteor.call('createDocument', {
+    leaderId: Meteor.userId(),
+    type: 'payment_agreement',
+    title: `Agreement - ${customerName}`,
+    customerId: customerId,
+    orderNumber: orderNumber,
+    terms: {
+      installments: 6,
+      monthlyPayment: 50000,
+      startDate: '01/04/2024'
+    },
+    status: 'active'
+  });
+  ```
+</Accordion>
+
+<Accordion title="Incident Reports">
+  Document field incidents:
+  
+  ```javascript
+  Meteor.call('createDocument', {
+    leaderId: Meteor.userId(),
+    type: 'incident',
+    title: `Incident - ${orderNumber}`,
+    orderNumber: orderNumber,
+    managerId: managerId,
+    description: 'Customer was aggressive',
+    severity: 'high',
+    actionTaken: 'Escalated to supervisor',
+    requiresFollowup: true
+  });
+  ```
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Reports" icon="chart-bar" href="/guide/reports">
+    Learn how to generate comprehensive reports
+  </Card>
+  
+  <Card title="User Roles" icon="users" href="/guide/user-roles">
+    Understand role-based access control
+  </Card>
+  
+  <Card title="Photo Management" icon="camera" href="/guide/photo-management">
+    Manage photo uploads and storage
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/architecture">
+    Explore the complete API architecture
+  </Card>
+</CardGroup>

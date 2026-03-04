@@ -1,0 +1,568 @@
+---
+title: User Roles
+description: Complete guide to user roles, permissions, and access control in Movilidad
+---
+
+## Role Overview
+
+Movilidad implements a hierarchical role-based access control (RBAC) system with three distinct roles:
+
+<Steps>
+  <Step title="Admin">
+    **Highest Level** - Full system access
+    
+    Admins manage the entire system including user creation, manager assignments, and cross-project reporting.
+  </Step>
+  
+  <Step title="Leader">
+    **Middle Level** - Project management
+    
+    Leaders manage their specific project, upload records, assign field workers, and generate team reports.
+  </Step>
+  
+  <Step title="Management (Gestor)">
+    **Field Level** - Mobile operations
+    
+    Field managers use the mobile app to complete assigned service orders and upload evidence.
+  </Step>
+</Steps>
+
+## Admin Role
+
+### Permissions
+
+<CardGroup cols={2}>
+  <Card title="User Management" icon="users-gear">
+    - Create leaders and managers
+    - Assign managers to leaders
+    - View all users across projects
+    - Manage user access
+  </Card>
+  
+  <Card title="Cross-Project Access" icon="building">
+    - View data from all projects
+    - Generate reports for any leader
+    - Access all manager data
+    - System-wide analytics
+  </Card>
+  
+  <Card title="System Configuration" icon="gear">
+    - Manage system settings
+    - Configure projects
+    - Monitor system health
+    - Access admin tools
+  </Card>
+  
+  <Card title="Reporting" icon="chart-bar">
+    - Generate reports for any team
+    - Export complete datasets
+    - View aggregated metrics
+    - Financial summaries
+  </Card>
+</CardGroup>
+
+### Admin Methods
+
+Methods restricted to admin role:
+
+```javascript
+Meteor.methods({
+  getLeaders(userId) {
+    const user = Meteor.users.findOne(userId);
+    if (!user || user.profile.role !== 'admin') {
+      throw new Meteor.Error('Unauthorized');
+    }
+    return Meteor.users.find({ 'profile.role': 'leader' }).fetch();
+  },
+  
+  getAllManagers(userId) {
+    const user = Meteor.users.findOne(userId);
+    if (!user || user.profile.role !== 'admin') {
+      throw new Meteor.Error('Unauthorized');
+    }
+    return Meteor.users.find({ 'profile.role': 'management' }).fetch();
+  },
+  
+  assignManagersToLeader(leaderId, managerIds) {
+    // Only admins can assign managers
+    if (!this.userId) throw new Meteor.Error('Not logged in');
+    
+    const admin = Meteor.users.findOne(this.userId);
+    if (admin.profile.role !== 'admin') {
+      throw new Meteor.Error('Unauthorized');
+    }
+    
+    Meteor.users.update(leaderId, {
+      $set: { 'profile.managers': managerIds }
+    });
+  }
+});
+```
+
+### Admin Menu
+
+```javascript
+admin: [
+  {
+    key: '10',
+    icon: <UserAddOutlined />,
+    label: 'Crear usuario',
+    onClick: () => setView(<NewUser />)
+  },
+  {
+    key: '11',
+    icon: <UsergroupAddOutlined />,
+    label: 'Gestores',
+    onClick: () => setView(<AssignManagers />)
+  },
+  {
+    key: '12',
+    icon: <SnippetsOutlined />,
+    label: 'Asignaciones',
+    onClick: () => setView(<GetReport admin />)
+  }
+]
+```
+
+## Leader Role
+
+### Permissions
+
+<CardGroup cols={2}>
+  <Card title="Record Management" icon="table">
+    - Upload Excel files with service orders
+    - View records in their project only
+    - Assign orders to their managers
+    - Update record assignments
+  </Card>
+  
+  <Card title="Team Management" icon="users">
+    - View assigned managers
+    - Assign managers to orders
+    - Bulk assignment operations
+    - Track manager workload
+  </Card>
+  
+  <Card title="Reporting" icon="file-chart-column">
+    - Generate reports for their team
+    - Export team data to Excel
+    - View performance metrics
+    - Track completion rates
+  </Card>
+  
+  <Card title="Project Isolation" icon="lock">
+    - Access only their project data
+    - Cannot see other projects
+    - Cannot modify other leaders' data
+    - Project-specific analytics
+  </Card>
+</CardGroup>
+
+### Leader Methods
+
+Methods available to leaders:
+
+```javascript
+Meteor.methods({
+  async getRecords(page, pageSize, filters, sort) {
+    // Automatically filter by user's project
+    const project = Meteor.users.findOne(this.userId).profile.project;
+    let filter = { project, ...filters };
+    
+    // Leaders can only see their own records
+    if (Meteor.user().profile.role === 'leader') {
+      filter.leaderId = this.userId;
+    }
+    
+    // ... fetch and return records
+  },
+  
+  async createRecord(record, leaderId) {
+    // Verify leader is creating their own records
+    if (this.userId !== leaderId) {
+      throw new Meteor.Error('Unauthorized');
+    }
+    
+    const _id = Random.id(10);
+    return recordsCollection.insert({ ...record, leaderId, _id });
+  },
+  
+  async updateRecordManager(recordId, managerId, leaderId, tipo_producto) {
+    // Verify record belongs to this leader
+    const record = recordsCollection.findOne({ 
+      NUMERO_DE_LA_ORDEN: recordId, 
+      leaderId 
+    });
+    
+    if (!record) {
+      throw new Meteor.Error('Record not found or access denied');
+    }
+    
+    // Update manager assignment
+    return await recordsCollection.updateAsync(
+      { NUMERO_DE_LA_ORDEN: recordId, leaderId },
+      { $set: { GESTOR: managerId, status: 'pending' } }
+    );
+  },
+  
+  getManagers(leaderId) {
+    // Leaders can only get their own managers
+    if (this.userId !== leaderId) {
+      throw new Meteor.Error('Unauthorized');
+    }
+    
+    const user = Meteor.users.findOne(leaderId);
+    const managers = user.profile?.managers || [];
+    
+    return managers.map(managerId => {
+      const manager = Meteor.users.findOne(managerId);
+      return { username: manager.username, id: manager._id };
+    });
+  }
+});
+```
+
+### Leader Menu
+
+```javascript
+leader: [
+  {
+    key: '10',
+    icon: <CloudUploadOutlined />,
+    label: 'Cargar',
+    onClick: () => setView(<AnalizeExcel />)
+  },
+  {
+    key: '11',
+    icon: <UserOutlined />,
+    label: 'Asignar gestores',
+    onClick: () => setView(<Records />)
+  },
+  {
+    key: '12',
+    icon: <SnippetsOutlined />,
+    label: 'Reportes',
+    onClick: () => setView(<GetReport />)
+  }
+]
+```
+
+## Management (Gestor) Role
+
+### Permissions
+
+<CardGroup cols={2}>
+  <Card title="Mobile App Access" icon="mobile">
+    - Download and use mobile app
+    - Login via JWT authentication
+    - View assigned service orders
+    - Work offline when needed
+  </Card>
+  
+  <Card title="Field Operations" icon="location-dot">
+    - View order details
+    - Update visit results
+    - Record customer interactions
+    - Capture geolocation
+  </Card>
+  
+  <Card title="Photo Upload" icon="camera">
+    - Take photos as evidence
+    - Upload up to 2 photos per order
+    - Photos linked to orders
+    - Automatic synchronization
+  </Card>
+  
+  <Card title="Status Updates" icon="check-circle">
+    - Mark orders as reviewed
+    - Submit visit outcomes
+    - Record payment status
+    - Add observations
+  </Card>
+</CardGroup>
+
+### Mobile API Endpoints
+
+Endpoints restricted to management role:
+
+```javascript
+// Authentication
+POST /login
+Body: { username, password }
+Response: { token }
+
+// Get assigned records
+GET /management/:username
+Authorization: Bearer <token>
+Response: Array of assigned records
+
+// Submit visit data
+POST /management
+Authorization: Bearer <token>
+Body: {
+  NUMERO_DE_LA_ORDEN,
+  fecha_gestion,
+  resultado_de_gestion,
+  // ... other fields
+}
+
+// Upload photos
+POST /management/photos/:orden
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+Fields: foto1, foto2
+```
+
+### Management Menu (Web)
+
+```javascript
+management: [
+  {
+    key: '13',
+    icon: <SnippetsOutlined />,
+    label: 'Aplicativo',
+    onClick: () => download('/movilidapp.apk')
+  }
+]
+```
+
+<Note>
+Managers have minimal web access. Their primary interface is the mobile app.
+</Note>
+
+## Role Hierarchy
+
+```
+Admin
+  │
+  ├── Can create Leaders and Managers
+  ├── Can assign Managers to Leaders
+  ├── Can view all data
+  └── System-wide access
+
+Leader
+  │
+  ├── Manages specific project
+  ├── Uploads service records
+  ├── Assigns work to Managers
+  └── Views team reports
+
+Management (Gestor)
+  │
+  ├── Receives assignments from Leader
+  ├── Completes field work
+  ├── Submits results via mobile
+  └── Limited web access
+```
+
+## Project Isolation
+
+Users are assigned to specific projects:
+
+```javascript
+{
+  username: 'john_leader',
+  profile: {
+    role: 'leader',
+    project: 'movilidad' // or 'sierra'
+  }
+}
+```
+
+### Available Projects
+
+<Tabs>
+  <Tab title="Movilidad">
+    General utility service management project
+    
+    Service types:
+    - General debt collection
+    - Service management
+    - Customer relations
+  </Tab>
+  
+  <Tab title="Sierra">
+    Specialized project with additional service types
+    
+    Service types:
+    - Cartera (Collections)
+    - Suspensión Sencilla (Simple Suspension)
+    - Suspensión Drástica (Drastic Suspension)
+    - Reconexiones (Reconnections)
+  </Tab>
+</Tabs>
+
+### Data Filtering by Project
+
+All queries automatically filter by project:
+
+```javascript
+const project = Meteor.users.findOne(this.userId).profile.project;
+const filter = { project, ...additionalFilters };
+
+const records = recordsCollection.find(filter).fetch();
+```
+
+<Warning>
+Users can NEVER see data from projects they're not assigned to. This is enforced at the method level.
+</Warning>
+
+## Role Detection
+
+Detect user role in components:
+
+```javascript
+import useRole from './hooks/useRole';
+
+function MyComponent() {
+  const { userRole, isLoading } = useRole();
+  
+  if (isLoading) return <Spinner />;
+  
+  return (
+    <div>
+      {userRole === 'admin' && <AdminTools />}
+      {userRole === 'leader' && <LeaderTools />}
+      {userRole === 'management' && <ManagerInfo />}
+    </div>
+  );
+}
+```
+
+## Permission Matrix
+
+| Feature | Admin | Leader | Management |
+|---------|-------|--------|------------|
+| Create users | ✓ | ✗ | ✗ |
+| Assign managers to leaders | ✓ | ✗ | ✗ |
+| Upload records | ✗ | ✓ | ✗ |
+| Assign records to managers | ✗ | ✓ | ✗ |
+| View own team's records | ✓ | ✓ | ✓* |
+| View other teams' records | ✓ | ✗ | ✗ |
+| Submit field visit data | ✗ | ✗ | ✓ |
+| Upload photos | ✗ | ✗ | ✓ |
+| Generate reports (own team) | ✓ | ✓ | ✗ |
+| Generate reports (all teams) | ✓ | ✗ | ✗ |
+| Export to Excel | ✓ | ✓ | ✗ |
+| Mobile app access | ✗ | ✗ | ✓ |
+| Web dashboard access | ✓ | ✓ | Limited |
+
+*Only assigned records via mobile API
+
+## Role-Based Menu Rendering
+
+Menus are dynamically rendered based on role:
+
+```javascript imports/ui/main.jsx
+import useRole from './hooks/useRole';
+import roleMenu from './utils/roleMenues';
+
+const Main = () => {
+  const [view, setView] = useState(<Vacio />);
+  const role = useRole();
+
+  return (
+    <Layout>
+      <Sider>
+        <Menu
+          items={[
+            {
+              key: '1',
+              icon: <UserOutlined />,
+              label: 'Mis opciones',
+              type: 'group',
+              children: roleMenu(role.userRole, setView)
+            },
+            {
+              key: '2',
+              type: 'divider'
+            },
+            {
+              key: '3',
+              label: 'Cuenta',
+              type: 'group',
+              children: [
+                {
+                  key: '1',
+                  icon: <LogoutOutlined />,
+                  label: 'Cerrar sesión',
+                  onClick: () => Meteor.logout()
+                }
+              ]
+            }
+          ]}
+        />
+      </Sider>
+      <Content>{view}</Content>
+    </Layout>
+  );
+};
+```
+
+## Security Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Server-Side Validation" icon="server">
+    Always validate role on the server, never trust client
+  </Card>
+  
+  <Card title="Method-Level Checks" icon="shield-check">
+    Every Meteor method must verify user role
+  </Card>
+  
+  <Card title="Data Filtering" icon="filter">
+    Automatically filter queries by project and role
+  </Card>
+  
+  <Card title="Least Privilege" icon="user-lock">
+    Give users minimum permissions needed for their role
+  </Card>
+</CardGroup>
+
+### Example Security Pattern
+
+```javascript
+Meteor.methods({
+  sensitiveOperation(data) {
+    // 1. Check if user is logged in
+    if (!this.userId) {
+      throw new Meteor.Error('not-authorized', 'Must be logged in');
+    }
+    
+    // 2. Get user and verify role
+    const user = Meteor.users.findOne(this.userId);
+    if (!user || user.profile.role !== 'admin') {
+      throw new Meteor.Error('not-authorized', 'Admin access required');
+    }
+    
+    // 3. Validate input
+    check(data, {
+      field1: String,
+      field2: Number
+    });
+    
+    // 4. Perform operation
+    return performSensitiveOperation(data);
+  }
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/guide/authentication">
+    Learn about login and security
+  </Card>
+  
+  <Card title="Managing Records" icon="table" href="/guide/managing-records">
+    Understand record workflows by role
+  </Card>
+  
+  <Card title="Mobile App" icon="mobile" href="/mobile/overview">
+    Set up the mobile app for managers
+  </Card>
+  
+  <Card title="Reports" icon="chart-bar" href="/guide/reports">
+    Generate role-appropriate reports
+  </Card>
+</CardGroup>

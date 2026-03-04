@@ -1,0 +1,460 @@
+---
+title: Architecture
+description: System architecture and technical design of the Movilidad platform
+---
+
+## System Overview
+
+Movilidad is built on a modern full-stack JavaScript architecture using Meteor.js, providing real-time data synchronization between web and mobile clients.
+
+## Technology Stack
+
+### Backend Framework
+
+**Meteor 3.0.1**
+
+Movilidad uses Meteor as its full-stack framework, providing:
+
+- Isomorphic JavaScript (same code runs on client and server)
+- Built-in WebSocket support for real-time updates
+- Integrated MongoDB driver
+- Hot Module Replacement for development
+- Production-ready build system
+
+```javascript
+// server/main.js
+import { Meteor } from 'meteor/meteor';
+import settings from '../settings.json';
+
+import '../imports/api/records/recordsIndex';
+import '../imports/api/photos/photosIndex';
+import '../imports/api/roles/rolesMethods';
+import '../imports/api/documents/documentsIndex';
+
+Meteor.startup(async () => {
+  // Initialize admin user if not exists
+  const admin = Meteor.users.findOne({ 
+    username: settings.private.admin.user 
+  });
+  if (!admin) {
+    Accounts.createUser({
+      username: settings.private.admin.user,
+      password: settings.private.admin.password,
+      profile: { role: 'admin' }
+    });
+  }
+});
+```
+
+### Database Layer
+
+**MongoDB**
+
+The application uses MongoDB with the following collections:
+
+<Tabs>
+  <Tab title="Records Collection">
+    ```javascript
+    import { Mongo } from 'meteor/mongo';
+    
+    export const recordsCollection = new Mongo.Collection('records');
+    ```
+    
+    Stores service orders with fields:
+    - Customer and service information
+    - Financial data
+    - Assignment details
+    - Field visit results
+    - Photos and geolocation
+  </Tab>
+  <Tab title="Photos Collection">
+    ```javascript
+    import { FilesCollection } from 'meteor/ostrio:files';
+    
+    export const photosCollection = new FilesCollection({
+      collectionName: 'photos',
+      storagePath: '/data/photos',
+      onBeforeUpload(file) {
+        // Validate: max 10MB, PNG/JPG/JPEG only
+        if (file.size > 10485760) 
+          return 'Max file size is 10MB';
+        if (!/png|jpg|jpeg/i.test(file.extension))
+          return 'Invalid format';
+        return true;
+      }
+    });
+    ```
+  </Tab>
+  <Tab title="Documents Collection">
+    ```javascript
+    import { Mongo } from 'meteor/mongo';
+    
+    export const documentsCollection = 
+      new Mongo.Collection('documents');
+    ```
+    
+    Stores uploaded documents associated with leaders.
+  </Tab>
+  <Tab title="Users Collection">
+    Built-in Meteor collection with custom profile schema:
+    ```javascript
+    {
+      username: String,
+      services: { password: { ... } },
+      profile: {
+        role: String, // 'admin', 'leader', 'management'
+        project: String, // 'movilidad', 'sierra'
+        managers: [String] // For leaders only
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Frontend Architecture
+
+### React Application
+
+The client-side uses React 18.2 with a component-based architecture:
+
+```javascript
+// client/main.jsx
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { Meteor } from 'meteor/meteor';
+import { App } from '/imports/ui/App';
+
+Meteor.startup(() => {
+  const container = document.getElementById('react-target');
+  const root = createRoot(container);
+  root.render(<App />);
+});
+```
+
+### Application Structure
+
+```javascript
+// imports/ui/App.jsx
+import React from 'react';
+import NotificationProvider from './contexts/notificationContext';
+import SecurityProvider from './contexts/securityProvider';
+import Login from './login';
+import Main from './main';
+
+export const App = () => (
+  <NotificationProvider>
+    <SecurityProvider publicPage={<Login />}>
+      <Main />
+    </SecurityProvider>
+  </NotificationProvider>
+);
+```
+
+<Steps>
+  <Step title="NotificationProvider">
+    Global notification context using Ant Design message/alert components
+  </Step>
+  <Step title="SecurityProvider">
+    Authentication wrapper that shows Login page for unauthenticated users
+  </Step>
+  <Step title="Main Layout">
+    Authenticated app shell with sidebar navigation and role-based menu
+  </Step>
+</Steps>
+
+### Component Organization
+
+```
+imports/ui/
+├── App.jsx                    # Root component
+├── login.jsx                  # Login page
+├── main.jsx                   # Main layout with sidebar
+├── vacio.jsx                  # Empty state component
+├── components/
+│   ├── records/              # Record management components
+│   │   ├── index.jsx         # Main records table
+│   │   ├── mainTable.jsx     # Data table component
+│   │   ├── reportTable.jsx   # Report display
+│   │   ├── financialTable.jsx
+│   │   ├── totals.jsx        # Summary statistics
+│   │   └── getReport.jsx     # Report generation
+│   ├── newUser/              # User creation form
+│   ├── assignManagers/       # Manager assignment
+│   ├── analizeExcel/         # Excel import
+│   ├── excelAssignButton/    # Bulk assignment
+│   └── reportView/           # Admin report view
+├── contexts/
+│   ├── notificationContext.jsx
+│   └── securityProvider.jsx
+├── hooks/
+│   └── useRole.jsx           # Custom role hook
+└── utils/
+    ├── formatIfNumber.js
+    ├── convertDate.js
+    └── roleMenues.js         # Role-based menu config
+```
+
+## API Layer
+
+### Meteor Methods
+
+Server-side methods provide the application's business logic:
+
+```javascript
+// imports/api/records/recordsMethods.js
+import { Meteor } from 'meteor/meteor';
+import { recordsCollection } from './recordsCollection';
+
+Meteor.methods({
+  async getRecords(page, pageSize, filters, sort) {
+    const project = Meteor.users.findOne(this.userId).profile.project;
+    
+    let filter = { project };
+    if (filters) {
+      for (const [key, value] of Object.entries(filters)) {
+        filter[key] = key === 'GESTOR' 
+          ? { $eq: value }
+          : { $regex: value, $options: 'i' };
+      }
+    }
+    
+    const records = await recordsCollection
+      .rawCollection()
+      .aggregate([
+        { $match: filter },
+        { $sort: { [sort.sortField]: sort.sortOrder } },
+        {
+          $facet: {
+            metadata: [{ $count: 'totalCount' }],
+            data: [
+              { $skip: (page - 1) * pageSize },
+              { $limit: pageSize }
+            ]
+          }
+        }
+      ])
+      .toArray();
+    
+    return {
+      data: records[0].data,
+      total: records[0].totalCount
+    };
+  }
+});
+```
+
+<Info>
+All methods automatically filter data by the user's project, ensuring data isolation.
+</Info>
+
+### REST API Endpoints
+
+For mobile app integration, REST endpoints are provided via `meteorhacks:picker`:
+
+```javascript
+// imports/api/records/recordsEndpoints.js
+import { Picker } from 'meteor/meteorhacks:picker';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = 'your_jwt_secret_key';
+
+// POST /login - Authenticate and get token
+postRoutes.route('/login', function(params, req, res) {
+  const { username, password } = req.body;
+  const user = Meteor.users.findOne({ username });
+  
+  if (!user) {
+    res.writeHead(401);
+    res.end(JSON.stringify({ message: 'Invalid credentials' }));
+    return;
+  }
+  
+  const result = Accounts._checkPassword(user, password);
+  if (result.error) {
+    res.writeHead(401);
+    res.end(JSON.stringify({ message: 'Invalid credentials' }));
+    return;
+  }
+  
+  const token = jwt.sign({ userId: user._id }, JWT_SECRET);
+  res.writeHead(200);
+  res.end(JSON.stringify({ token }));
+});
+```
+
+**Available Endpoints:**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/login` | Authenticate user and get JWT token |
+| POST | `/refresh-token` | Refresh expired JWT token |
+| GET | `/management/:username` | Get assigned records for manager |
+| POST | `/management` | Submit field visit results |
+| POST | `/management/photos/:orden` | Upload photos for service order |
+| GET | `/health` | Health check endpoint |
+
+## Data Flow
+
+### Web Application Flow
+
+<Steps>
+  <Step title="User Login">
+    User enters credentials → `Meteor.loginWithPassword()` → Session created
+  </Step>
+  <Step title="Role Detection">
+    `useRole()` hook reads `Meteor.user().profile.role` → Menu renders based on role
+  </Step>
+  <Step title="Data Subscription">
+    Components call `Meteor.call()` methods → Server filters by project → Data returned
+  </Step>
+  <Step title="UI Update">
+    `useTracker()` hook makes components reactive → UI updates automatically on data changes
+  </Step>
+</Steps>
+
+### Mobile Application Flow
+
+<Steps>
+  <Step title="Authentication">
+    POST `/login` → Receive JWT token → Store in device
+  </Step>
+  <Step title="Fetch Records">
+    GET `/management/:username` with Bearer token → Receive assigned records
+  </Step>
+  <Step title="Field Visit">
+    Manager visits location → Fills out form → Captures photos
+  </Step>
+  <Step title="Submit Data">
+    POST `/management` with visit data → POST `/management/photos/:orden` with images
+  </Step>
+  <Step title="Status Update">
+    Record status changes to 'reviewed' → Appears in reports
+  </Step>
+</Steps>
+
+## Security Architecture
+
+### Authentication
+
+<Tabs>
+  <Tab title="Web (Meteor Accounts)">
+    - Built-in Meteor accounts system
+    - Password hashing with bcrypt
+    - Session management via DDP
+    - Automatic logout on token expiration
+  </Tab>
+  <Tab title="Mobile (JWT)">
+    - JSON Web Tokens for stateless auth
+    - Token refresh mechanism
+    - 24-hour token expiration
+    - Bearer token in Authorization header
+  </Tab>
+</Tabs>
+
+### Authorization
+
+```javascript
+// Role-based method authorization
+Meteor.methods({
+  getLeaders(userId) {
+    const user = Meteor.users.findOne(userId);
+    if (!user || user.profile.role !== 'admin') {
+      throw new Meteor.Error('Unauthorized');
+    }
+    return Meteor.users.find({ 'profile.role': 'leader' }).fetch();
+  }
+});
+```
+
+### Data Isolation
+
+All queries automatically filter by project:
+
+```javascript
+const project = Meteor.users.findOne(this.userId).profile.project;
+const filter = { project, ...additionalFilters };
+```
+
+## Deployment Architecture
+
+### Docker Containerization
+
+```dockerfile
+# Dockerfile
+FROM geoffreybooth/meteor-base:3.0.1
+
+COPY ./app/package*.json $APP_SOURCE_FOLDER/
+RUN bash $SCRIPTS_FOLDER/build-app-npm-dependencies.sh
+
+COPY ./app $APP_SOURCE_FOLDER/
+RUN bash $SCRIPTS_FOLDER/build-meteor-bundle.sh
+
+FROM node:20.15.1-alpine
+RUN apk --no-cache add bash ca-certificates
+
+COPY --from=0 $SCRIPTS_FOLDER $SCRIPTS_FOLDER/
+COPY --from=0 $APP_BUNDLE_FOLDER/bundle $APP_BUNDLE_FOLDER/bundle/
+
+RUN bash $SCRIPTS_FOLDER/build-meteor-npm-dependencies.sh
+
+ENTRYPOINT ["/docker/entrypoint.sh"]
+CMD ["node", "main.js"]
+```
+
+### Environment Variables
+
+Required environment variables:
+
+- `MONGO_URL`: MongoDB connection string
+- `ROOT_URL`: Application URL for file links
+- `PORT`: HTTP port (default 3000)
+
+## Performance Considerations
+
+### Database Optimization
+
+<CardGroup cols={2}>
+  <Card title="Aggregation Pipeline" icon="database">
+    Complex queries use MongoDB aggregation for server-side processing
+  </Card>
+  <Card title="Pagination" icon="table">
+    All large datasets use skip/limit with total count in single query
+  </Card>
+  <Card title="Indexing" icon="magnifying-glass">
+    Key fields indexed for fast lookups and filtering
+  </Card>
+  <Card title="Projection" icon="filter">
+    Only required fields fetched to reduce data transfer
+  </Card>
+</CardGroup>
+
+### Frontend Optimization
+
+- **Code Splitting**: Dynamic imports for large components
+- **Memoization**: React hooks prevent unnecessary re-renders
+- **Virtual Scrolling**: Large tables rendered efficiently
+- **Debounced Search**: Search inputs debounced to reduce queries
+
+### File Storage
+
+Photos stored on filesystem at `/data/photos` with database references:
+
+```javascript
+export const photosCollection = new FilesCollection({
+  collectionName: 'photos',
+  storagePath: '/data/photos'
+});
+```
+
+<Warning>
+Ensure the `/data/photos` directory has appropriate permissions and is backed up regularly.
+</Warning>
+
+## Scalability
+
+Movilidad is designed to scale:
+
+- **Horizontal Scaling**: Multiple Meteor instances behind load balancer
+- **Database Sharding**: MongoDB supports sharding by project
+- **File Storage**: Can be migrated to S3 or similar cloud storage
+- **Caching**: Redis can be added for session storage and caching

@@ -1,0 +1,128 @@
+---
+title: Introduction to Movilidad
+description: A comprehensive utility service management platform built with Meteor.js for field operations and debt collection
+---
+
+## Welcome to Movilidad
+
+Movilidad is a powerful SaaS application designed for utility service management, specifically focused on debt collection and field operations management. Built with Meteor.js and React, it provides a complete solution for managing utility service records, field workers, and collection workflows.
+
+<Info>
+Movilidad is developed by Discol and is currently used for managing utility service operations across multiple projects.
+</Info>
+
+## What is Movilidad?
+
+Movilidad is a full-stack application that connects:
+
+- **Administrative users** who assign and monitor field operations
+- **Team leaders** who manage field workers and upload service records
+- **Field managers** (gestores) who perform on-site visits and update records via mobile app
+
+<CardGroup cols={2}>
+  <Card title="Web Dashboard" icon="desktop">
+    Complete administrative interface for managing records, users, and generating reports
+  </Card>
+  <Card title="Mobile App" icon="mobile">
+    Android application for field workers to manage assignments and upload photos
+  </Card>
+  <Card title="Real-time Sync" icon="sync">
+    Meteor's reactive data layer keeps all users synchronized in real-time
+  </Card>
+  <Card title="Excel Integration" icon="file-excel">
+    Bulk import/export capabilities for managing large datasets
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### User Role Management
+
+Movilidad supports three distinct user roles:
+
+- **Admin**: Full system access, user creation, and cross-project reporting
+- **Leader**: Project-specific access, record assignment, and team management
+- **Management** (Gestor): Mobile app access for field operations
+
+### Record Management
+
+The platform manages utility service records with comprehensive data including:
+
+- Customer information and service details
+- Debt and payment status
+- Field visit results and photos
+- Geolocation data
+- Service history and refinancing information
+
+### Mobile Integration
+
+Field workers use a dedicated Android app (`movilidapp.apk`) to:
+
+- View assigned service orders
+- Update visit results
+- Upload photos as evidence
+- Record geolocation data
+- Work offline and sync when connected
+
+## Technology Stack
+
+<Tabs>
+  <Tab title="Backend">
+    - **Meteor.js 3.0.1**: Full-stack JavaScript platform
+    - **MongoDB**: Database for records, users, and documents
+    - **Node.js 20.15.1**: Runtime environment
+    - **JWT Authentication**: Token-based auth for mobile API
+  </Tab>
+  <Tab title="Frontend">
+    - **React 18.2**: UI library
+    - **Ant Design 5.20**: Component library
+    - **Meteor React Data**: Reactive data integration
+    - **Moment.js**: Date manipulation
+  </Tab>
+  <Tab title="Features">
+    - **ostrio:files**: File upload and management
+    - **meteorhacks:picker**: REST API endpoints
+    - **xlsx**: Excel file processing
+    - **jsonwebtoken**: Mobile authentication
+  </Tab>
+</Tabs>
+
+## Use Cases
+
+Movilidad is designed for utility companies that need to:
+
+1. **Manage field operations** for debt collection
+2. **Track service orders** across multiple territories
+3. **Coordinate teams** of field workers
+4. **Generate reports** on collection performance
+5. **Maintain evidence** of field visits with photos and geolocation
+
+## Getting Started
+
+To get started with Movilidad:
+
+<Steps>
+  <Step title="Install Dependencies">
+    Follow the [installation guide](/getting-started/installation) to set up your development environment
+  </Step>
+  <Step title="Configure Settings">
+    Set up your [configuration](/getting-started/configuration) with MongoDB and admin credentials
+  </Step>
+  <Step title="Create Users">
+    Learn how to [create your first user](/getting-started/first-user) and understand roles
+  </Step>
+  <Step title="Explore Features">
+    Check out the [user guide](/guide/authentication) to learn about all features
+  </Step>
+</Steps>
+
+## Quick Links
+
+- [Features Overview](/features) - Detailed feature list
+- [Architecture](/architecture) - System architecture and design
+- [User Guide](/guide/authentication) - Complete user documentation
+- [Mobile App](/mobile/overview) - Mobile application guide
+
+<Note>
+This documentation covers both the web application and mobile app. Make sure to read the relevant sections for your role.
+</Note>

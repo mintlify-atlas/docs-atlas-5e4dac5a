@@ -1,0 +1,349 @@
+---
+title: Features
+description: Comprehensive overview of Movilidad's capabilities for utility service management
+---
+
+## Core Features
+
+Movilidad provides a complete suite of features for managing utility service operations, field workers, and debt collection workflows.
+
+## User Management
+
+### Role-Based Access Control
+
+Movilidad implements a three-tier role system:
+
+<CardGroup cols={3}>
+  <Card title="Admin" icon="shield">
+    Full system access with user creation, cross-project reporting, and manager assignment capabilities
+  </Card>
+  <Card title="Leader" icon="users">
+    Project-specific access to upload records, assign field workers, and generate team reports
+  </Card>
+  <Card title="Management" icon="clipboard">
+    Mobile app access for field operations, record updates, and photo uploads
+  </Card>
+</CardGroup>
+
+### User Creation
+
+Administrators can create users with the following method:
+
+```javascript
+Meteor.call('createUserWithRole', username, password, role, project, (error) => {
+  if (error) {
+    message.error('Error creating user: ' + error.reason);
+  } else {
+    message.success('User created successfully');
+  }
+});
+```
+
+<Info>
+Users are automatically assigned to projects (either "movilidad" or "sierra") during creation, ensuring data isolation between projects.
+</Info>
+
+### Manager Assignment
+
+Leaders can be assigned specific managers (field workers) using:
+
+```javascript
+Meteor.call('assignManagersToLeader', leaderId, managerIds);
+```
+
+This creates hierarchical relationships for proper data access control.
+
+## Record Management
+
+### Excel Bulk Import
+
+Leaders can upload Excel files containing service records. The system:
+
+- Validates data format and required fields
+- Assigns unique IDs to each record
+- Associates records with the leader's project
+- Removes duplicates based on order numbers
+
+<Steps>
+  <Step title="Upload Excel File">
+    Use the "Cargar" (Upload) option to select your Excel file
+  </Step>
+  <Step title="Review Preview">
+    The system displays a preview of records to be imported
+  </Step>
+  <Step title="Confirm Import">
+    Click confirm to import all valid records into the system
+  </Step>
+</Steps>
+
+### Record Assignment
+
+Leaders assign service orders to field managers:
+
+```javascript
+Meteor.call('updateRecordManager', recordId, managerId, leaderId, serviceType, (error) => {
+  if (error) {
+    message.error('Error assigning manager');
+  } else {
+    message.success('Manager assigned successfully');
+  }
+});
+```
+
+**Assignment features:**
+
+- Individual assignment via dropdown
+- Bulk assignment for multiple records
+- Service type specification (Cartera, Suspensión, Reconexiones)
+- Automatic date stamping with assignment date
+
+### Advanced Search and Filtering
+
+The records table provides powerful search capabilities:
+
+<Tabs>
+  <Tab title="Text Search">
+    Search by any field including:
+    - Order number (NUMERO_DE_LA_ORDEN)
+    - Customer name (NOMBRE_CLIENTE)
+    - Address (DIRECCION_PREDIO)
+    - Contract number (CONTRATO)
+    - Product ID (PRODUCTO)
+  </Tab>
+  <Tab title="Manager Filter">
+    Filter records by:
+    - Assigned manager
+    - Unassigned records
+    - Specific manager selection
+  </Tab>
+  <Tab title="Date Filter">
+    Filter by period using date picker for assignment date filtering
+  </Tab>
+  <Tab title="Sorting">
+    Sort ascending or descending on any column
+  </Tab>
+</Tabs>
+
+### Data Fields
+
+Each record contains comprehensive information:
+
+- **Customer Data**: Name, ID, address, contact information
+- **Service Details**: Product type, contract, meter reading, service category
+- **Financial Info**: Current debt, overdue debt, payment history
+- **Geographic Data**: Neighborhood, cycle, property type
+- **Status Indicators**: Financial state, service indicator, refinancing count
+
+## Photo Management
+
+Field workers can upload photos as evidence of visits:
+
+### Photo Upload API
+
+The mobile app uses REST endpoints to upload photos:
+
+```javascript
+POST /management/photos/:orden
+Content-Type: multipart/form-data
+Authorization: Bearer <token>
+
+Fields:
+- foto1: File
+- foto2: File
+```
+
+<Warning>
+Photos are limited to 10MB per file and must be in PNG, JPG, or JPEG format.
+</Warning>
+
+The system:
+
+- Stores photos using `ostrio:files` collection
+- Associates photos with service orders
+- Allows up to 2 photos per visit
+- Provides secure access via generated links
+
+## Document Management
+
+The platform supports document creation and storage:
+
+```javascript
+Meteor.call('createDocument', data);
+```
+
+Documents are:
+
+- Associated with leaders via `leaderId`
+- Timestamped automatically
+- Paginated for efficient retrieval
+- Searchable and filterable
+
+## Reporting System
+
+### Management Reports
+
+Generate comprehensive reports with:
+
+```javascript
+Meteor.call('reportManagement', {
+  page: 1,
+  pageSize: 50,
+  managerId: 'managerId',
+  leaderId: 'leaderId',
+  period: ISODateString,
+  date: 'DD/MM/YYYY',
+  startDate: 'DD/MM/YYYY',
+  endDate: 'DD/MM/YYYY',
+  sortField: 'CONTRATO',
+  sortOrder: 1,
+  assigneds: true
+});
+```
+
+**Report includes:**
+
+<CardGroup cols={2}>
+  <Card title="Assignment Metrics">
+    Total records assigned, pending, and completed per manager
+  </Card>
+  <Card title="Financial Totals">
+    Total debt assigned and managed, grouped by manager
+  </Card>
+  <Card title="Product Breakdown">
+    Counts by product type: Gas, Brilla, Financial Services
+  </Card>
+  <Card title="Status Indicators">
+    Distribution across Normalización, Contención, Castigado
+  </Card>
+</CardGroup>
+
+### Excel Export
+
+Reports can be exported to Excel format:
+
+- Downloads all matching records (handles pagination automatically)
+- Includes all data fields
+- Formatted headers for readability
+- Progress indicator for large exports
+
+<Note>
+Excel exports use the `xlsx` library and handle datasets of any size through batched retrieval.
+</Note>
+
+## Mobile API
+
+### Authentication
+
+JWT-based authentication for mobile access:
+
+```javascript
+POST /login
+Body: { username, password }
+Response: { token }
+```
+
+Token refresh endpoint:
+
+```javascript
+POST /refresh-token
+Body: { token }
+Response: { token: newToken }
+```
+
+### Record Retrieval
+
+Field workers fetch their assigned records:
+
+```javascript
+GET /management/:username
+Authorization: Bearer <token>
+Response: Array of assigned records
+```
+
+### Record Updates
+
+Submit field visit results:
+
+```javascript
+POST /management
+Authorization: Bearer <token>
+Body: {
+  NUMERO_DE_LA_ORDEN,
+  fecha_gestion,
+  resultado_de_gestion,
+  causal_de_pago,
+  estado_servicio,
+  observacion,
+  ubicacion: { latitud, longitud },
+  status: 'reviewed',
+  // ... additional fields
+}
+```
+
+## Real-time Features
+
+### Reactive Data
+
+Movilidad uses Meteor's reactive data layer:
+
+- Changes sync automatically across all connected clients
+- Publications filter data by user role and project
+- Subscriptions update UI instantly when data changes
+
+### Notifications
+
+The app includes a notification context for user feedback:
+
+```javascript
+const { alertMessage } = useContext(NotificationContext);
+
+alertMessage({
+  type: 'success',
+  message: 'Operation completed',
+  description: 'The record was updated successfully',
+  placement: 'top'
+});
+```
+
+## Security Features
+
+<CardGroup cols={2}>
+  <Card title="Role-Based Access" icon="lock">
+    All Meteor methods validate user roles before execution
+  </Card>
+  <Card title="Project Isolation" icon="building">
+    Data is automatically filtered by user's assigned project
+  </Card>
+  <Card title="JWT Authentication" icon="key">
+    Mobile API uses token-based authentication with expiration
+  </Card>
+  <Card title="Health Monitoring" icon="heart-pulse">
+    System health endpoints for monitoring and maintenance mode
+  </Card>
+</CardGroup>
+
+### Method Security
+
+All server methods validate inputs:
+
+```javascript
+import { check } from 'meteor/check';
+
+Meteor.methods({
+  createUserWithRole(username, password, role, project) {
+    check(username, String);
+    check(password, String);
+    check(role, String);
+    check(project, String);
+    // ... method implementation
+  }
+});
+```
+
+## Performance Optimizations
+
+- **Pagination**: All large datasets use server-side pagination
+- **Aggregation**: MongoDB aggregation pipeline for efficient queries
+- **Indexed Fields**: Key fields optimized for search performance
+- **Lazy Loading**: Components load data only when needed
+- **Caching**: React component state prevents unnecessary re-renders
